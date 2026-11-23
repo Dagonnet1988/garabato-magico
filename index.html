@@ -1,0 +1,211 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no">
+<title>Garabato Mágico</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Garabato">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fredoka:wght@500;600;700&family=Nunito:wght@500;700;800&display=swap">
+<link rel="stylesheet" href="css/app.css">
+</head>
+<body>
+<div class="app" id="app">
+  <header class="barra">
+    <div class="marca"><span class="marca-g">Garabato</span> <span class="marca-m">Mágico</span></div>
+    <nav class="pasos" id="pasos" aria-label="Pasos">
+      <button class="paso" data-ir="dibujos" id="paso-dibujos"><span class="paso-ic" aria-hidden="true">🖼️</span><span>Dibujos</span></button>
+      <button class="paso" data-ir="marcar" id="paso-marcar"><span class="paso-ic" aria-hidden="true">✋</span><span>Marcar</span></button>
+      <button class="paso" data-ir="colorear" id="paso-colorear"><span class="paso-ic" aria-hidden="true">🖍️</span><span>Colorear</span></button>
+      <button class="paso" data-ir="cuento" id="paso-cuento"><span class="paso-ic" aria-hidden="true">📖</span><span>Cuento</span></button>
+    </nav>
+  </header>
+
+  <!-- 1. Galería de dibujos -->
+  <main class="pantalla" id="pantalla-dibujos">
+    <div class="galeria-intro">
+      <h1>Mis dibujos</h1>
+      <p>Toma una foto de tu dibujo en papel. Luego marca sus partes con el dedo para que se mueva.</p>
+    </div>
+    <div class="galeria" id="galeria">
+      <label class="tarjeta nueva" for="foto-nueva">
+        <span class="nueva-ic" aria-hidden="true">📷</span>
+        <span class="nueva-t">Nuevo dibujo</span>
+        <span class="nueva-s">Toma o elige una foto</span>
+      </label>
+    </div>
+    <input type="file" id="foto-nueva" accept="image/*" class="oculto">
+  </main>
+
+  <!-- 2. Importar foto -->
+  <main class="pantalla trabajo" id="pantalla-importar" hidden>
+    <div class="escenario"><div class="hoja"><canvas id="cv-importar"></canvas></div></div>
+    <aside class="panel">
+      <h2>Así quedó tu dibujo</h2>
+      <p class="ayuda">Quitamos el papel. Si falta una línea o sobran manchas, mueve las barras.</p>
+      <label class="campo" for="imp-umbral"><span>Líneas suaves ↔ fuertes</span>
+        <input type="range" id="imp-umbral" min="6" max="40" value="16"></label>
+      <label class="campo" for="imp-manchas"><span>Quitar manchitas</span>
+        <input type="range" id="imp-manchas" min="0" max="400" value="60"></label>
+      <label class="check" for="imp-bordes"><input type="checkbox" id="imp-bordes" checked> Quitar lo que toca el borde de la foto</label>
+      <label class="campo" for="imp-nombre"><span>¿Cómo se llama?</span>
+        <input type="text" id="imp-nombre" maxlength="40" placeholder="Por ejemplo: Parrot Ninja" autocomplete="off"></label>
+      <div class="fila">
+        <button class="btn" id="imp-cancelar">Cancelar</button>
+        <button class="btn primario" id="imp-guardar">Guardar dibujo</button>
+      </div>
+    </aside>
+  </main>
+
+  <!-- 3. Marcar partes -->
+  <main class="pantalla trabajo" id="pantalla-marcar" hidden>
+    <div class="escenario">
+      <div class="hoja" id="hoja-marcar"><canvas id="cv-marcar"></canvas></div>
+      <div class="flotante zoom">
+        <button class="redondo" id="mk-zoom-menos" aria-label="Alejar">−</button>
+        <button class="redondo" id="mk-zoom-ajustar" aria-label="Ver todo">⤢</button>
+        <button class="redondo" id="mk-zoom-mas" aria-label="Acercar">+</button>
+      </div>
+      <div class="pista" id="mk-pista">Elige una parte y píntala con el dedo</div>
+    </div>
+    <aside class="panel">
+      <div class="fila" id="mk-arriba">
+        <button class="btn" id="mk-deshacer">↶ Deshacer</button>
+        <button class="btn primario" id="mk-probar">▶ ¡Probar!</button>
+      </div>
+      <div class="seccion">
+        <h2 id="mk-titulo">Partes</h2>
+        <div class="partes" id="mk-partes"></div>
+        <button class="btn grande" id="mk-nueva">＋ Nueva parte</button>
+      </div>
+      <div class="seccion" id="mk-herramientas">
+        <h3>¿Cómo la marco?</h3>
+        <div class="herramientas">
+          <button class="herr" data-herr="pincel" id="mk-h-pincel"><span aria-hidden="true">🖌️</span>Pintar</button>
+          <button class="herr" data-herr="varita" id="mk-h-varita"><span aria-hidden="true">🪄</span>Tocar línea</button>
+          <button class="herr" data-herr="lazo" id="mk-h-lazo"><span aria-hidden="true">⭕</span>Encerrar</button>
+          <button class="herr" data-herr="goma" id="mk-h-goma"><span aria-hidden="true">🧽</span>Borrar marca</button>
+        </div>
+        <div class="tamanos" id="mk-tamanos">
+          <button class="tam" data-tam="8" aria-label="Pincel fino"><i style="--d:8px"></i></button>
+          <button class="tam" data-tam="18" aria-label="Pincel mediano"><i style="--d:16px"></i></button>
+          <button class="tam" data-tam="34" aria-label="Pincel grueso"><i style="--d:26px"></i></button>
+        </div>
+      </div>
+      <div class="seccion" id="mk-prueba" hidden>
+        <h3>Prueba un movimiento</h3>
+        <div class="acciones" id="mk-acciones"></div>
+        <button class="btn" id="mk-volver">✋ Seguir marcando</button>
+      </div>
+    </aside>
+  </main>
+
+  <!-- 4. Colorear -->
+  <main class="pantalla trabajo" id="pantalla-colorear" hidden>
+    <div class="escenario">
+      <div class="hoja"><canvas id="cv-colorear"></canvas></div>
+      <div class="flotante zoom">
+        <button class="redondo" id="co-zoom-menos" aria-label="Alejar">−</button>
+        <button class="redondo" id="co-zoom-ajustar" aria-label="Ver todo">⤢</button>
+        <button class="redondo" id="co-zoom-mas" aria-label="Acercar">+</button>
+      </div>
+    </div>
+    <aside class="panel">
+      <div class="seccion">
+        <h2>Colorear</h2>
+        <div class="herramientas">
+          <button class="herr" data-herr="cubeta" id="co-h-cubeta"><span aria-hidden="true">🪣</span>Rellenar</button>
+          <button class="herr" data-herr="crayon" id="co-h-crayon"><span aria-hidden="true">🖍️</span>Crayón</button>
+          <button class="herr" data-herr="lapiz" id="co-h-lapiz"><span aria-hidden="true">✏️</span>Lápiz</button>
+          <button class="herr" data-herr="goma" id="co-h-goma"><span aria-hidden="true">🧽</span>Borrador</button>
+        </div>
+        <div class="tamanos" id="co-tamanos">
+          <button class="tam" data-tam="6" aria-label="Fino"><i style="--d:8px"></i></button>
+          <button class="tam" data-tam="16" aria-label="Mediano"><i style="--d:16px"></i></button>
+          <button class="tam" data-tam="32" aria-label="Grueso"><i style="--d:26px"></i></button>
+        </div>
+        <div class="paleta" id="co-paleta"></div>
+        <div class="fila">
+          <button class="btn" id="co-deshacer">↶ Deshacer</button>
+        </div>
+        <p class="ayuda">Lo que pintes se mueve con la parte que marcaste.</p>
+      </div>
+    </aside>
+  </main>
+
+  <!-- 5. Cuento -->
+  <main class="pantalla trabajo" id="pantalla-cuento" hidden>
+    <div class="escenario">
+      <div class="teatro"><canvas id="cv-cuento"></canvas></div>
+      <div class="controles">
+        <button class="redondo" id="cu-ant" aria-label="Escena anterior">◀</button>
+        <button class="redondo grande" id="cu-play" aria-label="Reproducir">▶</button>
+        <button class="redondo" id="cu-sig" aria-label="Escena siguiente">▶▶</button>
+        <span class="contador" id="cu-contador">Escena 1 de 1</span>
+      </div>
+    </div>
+    <aside class="panel">
+      <div class="seccion">
+        <h2>Mi cuento</h2>
+        <label class="campo" for="cu-protagonista"><span>¿Quién es el protagonista?</span>
+          <select id="cu-protagonista"></select></label>
+        <label class="campo" for="cu-texto"><span>Escribe tu cuento. Cada oración es una escena.</span>
+          <textarea id="cu-texto" rows="7"></textarea></label>
+        <label class="check" for="cu-voz"><input type="checkbox" id="cu-voz" checked> Leer en voz alta</label>
+      </div>
+      <div class="seccion" id="cu-faltan-sec" hidden>
+        <h3>¡Faltan dibujos!</h3>
+        <div class="faltan" id="cu-faltan"></div>
+      </div>
+      <div class="seccion">
+        <h3>Escenas</h3>
+        <ol class="escenas" id="cu-escenas"></ol>
+      </div>
+    </aside>
+  </main>
+</div>
+
+<!-- Selector de parte -->
+<div class="modal" id="modal-parte" hidden>
+  <div class="modal-caja" role="dialog" aria-modal="true" aria-labelledby="mp-titulo">
+    <h2 id="mp-titulo">¿Qué parte vas a marcar?</h2>
+    <div class="tipos" id="mp-tipos"></div>
+    <div class="otra" id="mp-otra" hidden>
+      <label class="campo" for="mp-nombre"><span>Nombre de la parte</span>
+        <input type="text" id="mp-nombre" maxlength="24" autocomplete="off"></label>
+    </div>
+    <div class="fila"><button class="btn" id="mp-cerrar">Cerrar</button></div>
+  </div>
+</div>
+
+<!-- Editar parte -->
+<div class="modal" id="modal-editar" hidden>
+  <div class="modal-caja" role="dialog" aria-modal="true" aria-labelledby="me-titulo">
+    <h2 id="me-titulo">Parte</h2>
+    <label class="campo" for="me-nombre"><span>Nombre</span>
+      <input type="text" id="me-nombre" maxlength="24" autocomplete="off"></label>
+    <h3>¿Cómo se mueve?</h3>
+    <div class="movs" id="me-movs"></div>
+    <div class="fila">
+      <button class="btn peligro" id="me-borrar">Borrar parte</button>
+      <button class="btn primario" id="me-listo">Listo</button>
+    </div>
+  </div>
+</div>
+
+<div class="aviso" id="aviso" role="status" aria-live="polite" hidden></div>
+
+<script src="js/util.js"></script>
+<script src="js/store.js"></script>
+<script src="js/imagen.js"></script>
+<script src="js/lienzo.js"></script>
+<script src="js/rig.js"></script>
+<script src="js/muestra.js"></script>
+<script src="js/marcar.js"></script>
+<script src="js/colorear.js"></script>
+<script src="js/cuento.js"></script>
+<script src="js/app.js"></script>
+</body>
+</html>
