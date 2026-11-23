@@ -329,7 +329,14 @@
     $('#cu-faltan-sec').hidden = !r.faltan.length;
     if (S.i >= S.escenas.length) S.i = 0;
     irA(S.i);
-    GM.store.guardarAjuste('cuento', { texto: $('#cu-texto').value, protagonista: S.protagonista });
+    const texto = $('#cu-texto').value;
+    if (texto !== S.ultimoTexto || S.protagonista !== S.ultimoProta) {
+      S.ultimoTexto = texto; S.ultimoProta = S.protagonista;
+      const valor = { texto, protagonista: S.protagonista, modificado: Date.now() };
+      S.modificado = valor.modificado;
+      GM.store.guardarAjuste('cuento', valor);
+      if (!S.cargando) GM.nube.guardarCuento(valor);
+    }
   }
 
   function llenarProtagonistas() {
@@ -350,6 +357,8 @@
       const guardado = await GM.store.leerAjuste('cuento');
       $('#cu-texto').value = guardado && guardado.texto ? guardado.texto : GM.MUESTRA.cuento;
       S.protagonista = guardado ? guardado.protagonista : null;
+      S.modificado = (guardado && guardado.modificado) || 0;
+      S.ultimoTexto = $('#cu-texto').value; S.ultimoProta = S.protagonista;
       $('#cu-texto').addEventListener('input', GM.debounce(actualizar, 400));
       $('#cu-protagonista').addEventListener('change', (e) => { S.protagonista = e.target.value; actualizar(); });
       $('#cu-play').addEventListener('click', () => (S.jugando ? parar() : jugar()));
@@ -367,5 +376,17 @@
     },
     cerrar() { S.visible = false; parar(); cancelAnimationFrame(S.anim); },
     analizar,
+    /** El cuento escrito en otro equipo, si es más nuevo que el de aquí. */
+    desdeNube(v) {
+      if (!v || !v.texto || (v.modificado || 0) <= (S.modificado || 0)) {
+        if (v && (v.modificado || 0) < (S.modificado || 0)) GM.nube.guardarCuento({ texto: S.ultimoTexto, protagonista: S.protagonista, modificado: S.modificado });
+        return;
+      }
+      $('#cu-texto').value = v.texto;
+      S.protagonista = v.protagonista || S.protagonista;
+      S.ultimoTexto = v.texto; S.ultimoProta = S.protagonista; S.modificado = v.modificado;
+      GM.store.guardarAjuste('cuento', { texto: v.texto, protagonista: S.protagonista, modificado: v.modificado });
+      if (S.visible) { llenarProtagonistas(); actualizar(); }
+    },
   };
 })(window.GM);

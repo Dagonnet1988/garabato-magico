@@ -23,7 +23,17 @@ Pensada para iPad. Funciona sin internet una vez cargada y sin IA: todo pasa en 
 
 Con GitHub Pages activado (Settings → Pages → rama `main`, carpeta `/ (root)`), la app queda en `https://dagonnet1988.github.io/garabato-magico/`. En Safari: Compartir → «Agregar a pantalla de inicio».
 
-Los dibujos se guardan en el propio iPad (no hace falta base de datos). Ojo: Safari y el ícono de pantalla de inicio guardan por separado, así que conviene usar siempre el mismo.
+Los dibujos se guardan en el propio iPad. Ojo: Safari y el ícono de pantalla de inicio guardan por separado, así que conviene usar siempre el mismo.
+
+## Guardar en la nube (opcional, para usar varios equipos)
+
+1. Crea una cuenta y un proyecto gratis en [supabase.com](https://supabase.com).
+2. En **SQL Editor**, pega todo `supabase/esquema.sql` y dale **Run**.
+3. En **Authentication → Email Templates → Magic Link**, agrega `{{ .Token }}` al mensaje para que el correo traiga el código de 6 números.
+4. En **Authentication → URL Configuration**, pon como *Site URL* `https://dagonnet1988.github.io/garabato-magico/`.
+5. Copia la **Project URL** y la clave **anon public** (Project Settings → API) en `js/config.js`.
+
+Luego, en la app, toca **☁️ Guardar en la nube**, escribe tu correo y el código que te llega. En cada equipo se hace una sola vez.
 
 ## Probar en el computador
 

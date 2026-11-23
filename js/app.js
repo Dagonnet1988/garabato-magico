@@ -13,10 +13,17 @@
     };
   }
 
+  /** Guarda en el iPad y, si hay cuenta, lo sube a la nube. */
+  async function persistir(d) {
+    d.modificado = Date.now();
+    await GM.store.guardar(d);
+    GM.nube.cambio(d);
+  }
+
   const guardando = new Map();
   function guardarLuego(d) {
     clearTimeout(guardando.get(d.id));
-    guardando.set(d.id, setTimeout(() => { GM.store.guardar(d); guardando.delete(d.id); }, 700));
+    guardando.set(d.id, setTimeout(() => { persistir(d); guardando.delete(d.id); }, 700));
   }
 
   /* ---------- ejemplo ---------- */
@@ -67,6 +74,7 @@
         A.dibujos = A.dibujos.filter((x) => x !== d);
         if (A.actual === d) A.actual = A.dibujos[0] || null;
         await GM.store.borrar(d.id);
+        GM.nube.borrado(d.id);
         pintarGaleria(); pintarPasos();
       });
       b.addEventListener('click', () => { A.actual = d; ir('marcar'); });
@@ -124,7 +132,7 @@
     A.dibujos.push(d);
     A.actual = d;
     A.imp = null; A.nombrePedido = null;
-    await GM.store.guardar(d);
+    await persistir(d);
     pintarGaleria();
     ir('marcar');
     GM.aviso('¡Listo! Ahora marca sus partes con el dedo', 3200);
@@ -153,7 +161,7 @@
   }
 
   function pintarPasos() {
-    GM.$$('.paso').forEach((b) => {
+    GM.$$('.paso[data-ir]').forEach((b) => {
       const p = b.dataset.ir;
       if (p === A.pantalla || (A.pantalla === 'importar' && p === 'dibujos')) b.setAttribute('aria-current', 'page');
       else b.removeAttribute('aria-current');
@@ -170,7 +178,7 @@
     A.dibujos.push(d);
     A.actual = d;
     A.nombrePedido = null;
-    await GM.store.guardar(d);
+    await persistir(d);
     pintarGaleria();
     mostrar('colorear');
     GM.colorear.abrir(d, 'lapiz');
@@ -182,6 +190,58 @@
     $('#mn-nombre').value = nombre || '';
     $('#modal-nombre').hidden = false;
   }
+
+  /* ---------- nube ---------- */
+  const TEXTO_ESTADO = {
+    'sin-sesion': ['☁️', 'Guardar en la nube'],
+    sincronizando: ['🔄', 'Guardando…'],
+    listo: ['✅', 'En la nube'],
+    error: ['⚠️', 'Sin conexión'],
+  };
+
+  function pintarCuenta(e) {
+    const b = $('#btn-cuenta');
+    if (!GM.nube.disponible()) { b.hidden = true; return; }
+    const [ic, t] = TEXTO_ESTADO[e] || TEXTO_ESTADO['sin-sesion'];
+    b.hidden = false;
+    b.querySelector('.paso-ic').textContent = ic;
+    b.querySelector('.t').textContent = t;
+  }
+
+  function abrirCuenta() {
+    const con = !!GM.nube.correo();
+    $('#cu-sin').hidden = con; $('#cu-con').hidden = !con;
+    $('#cn-paso2').hidden = true; $('#cn-error').hidden = true;
+    $('#cn-correo-actual').textContent = GM.nube.correo();
+    $('#modal-cuenta').hidden = false;
+  }
+
+  function errorCuenta(t) { const e = $('#cn-error'); e.textContent = t; e.hidden = false; }
+
+  async function aplicarSincronizacion(r) {
+    if (!r) return;
+    let cambio = false;
+    for (const id of r.borrados) {
+      A.dibujos = A.dibujos.filter((d) => d.id !== id);
+      await GM.store.borrar(id);
+      cambio = true;
+    }
+    for (const n of r.nuevos) {
+      const i = A.dibujos.findIndex((d) => d.id === n.id);
+      if (i >= 0) A.dibujos[i] = n; else A.dibujos.push(n);
+      await GM.store.guardar(n);
+      cambio = true;
+    }
+    if (r.cuento) GM.cuento.desdeNube(r.cuento);
+    if (!cambio) return;
+    A.dibujos.sort((a, b) => (a.creado || 0) - (b.creado || 0));
+    if (A.actual) A.actual = A.dibujos.find((d) => d.id === A.actual.id) || A.dibujos[0] || null;
+    else A.actual = A.dibujos[0] || null;
+    ir(['marcar', 'colorear'].includes(A.pantalla) && !A.actual ? 'dibujos' : A.pantalla === 'importar' ? 'importar' : A.pantalla);
+    GM.aviso('Tus dibujos de la nube ya están aquí ☁️');
+  }
+
+  async function sincronizar() { aplicarSincronizacion(await GM.nube.sincronizar()); }
 
   GM.app = {
     guardarLuego,
@@ -198,12 +258,42 @@
     GM.marcar.init();
     GM.colorear.init();
     await GM.cuento.init();
-    GM.$$('.paso').forEach((b) => b.addEventListener('click', () => ir(b.dataset.ir)));
+    GM.$$('.paso[data-ir]').forEach((b) => b.addEventListener('click', () => ir(b.dataset.ir)));
     $('#foto-nueva').addEventListener('change', (e) => { A.nombrePedido = A.nombrePedido || null; alElegirFoto(e.target.files[0]); });
     GM.$('label.tarjeta.nueva').addEventListener('click', () => { A.nombrePedido = null; });
     const re = GM.debounce(reextraer, 120);
     ['#imp-umbral', '#imp-manchas'].forEach((s) => $(s).addEventListener('input', re));
     $('#imp-bordes').addEventListener('change', reextraer);
+    GM.nube.alCambiar(pintarCuenta);
+    $('#btn-cuenta').addEventListener('click', abrirCuenta);
+    $('#cn-cerrar').addEventListener('click', () => { $('#modal-cuenta').hidden = true; });
+    $('#cn-cerrar2').addEventListener('click', () => { $('#modal-cuenta').hidden = true; });
+    $('#cn-enviar').addEventListener('click', async () => {
+      const email = $('#cn-correo').value.trim();
+      if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) { errorCuenta('Escribe un correo válido.'); return; }
+      $('#cn-enviar').disabled = true;
+      try {
+        await GM.nube.enviarCodigo(email);
+        $('#cn-error').hidden = true;
+        $('#cn-paso2').hidden = false;
+        $('#cn-codigo').focus();
+      } catch (e) { errorCuenta('No se pudo enviar el correo: ' + e.message); }
+      $('#cn-enviar').disabled = false;
+    });
+    $('#cn-entrar').addEventListener('click', async () => {
+      const email = $('#cn-correo').value.trim(), codigo = $('#cn-codigo').value.replace(/\D/g, '');
+      if (codigo.length < 6) { errorCuenta('El código tiene 6 números o más.'); return; }
+      $('#cn-entrar').disabled = true;
+      try {
+        await GM.nube.verificarCodigo(email, codigo);
+        $('#modal-cuenta').hidden = true;
+        GM.aviso('¡Listo! Tus dibujos se guardan en la nube');
+        sincronizar();
+      } catch (e) { errorCuenta('Ese código no sirvió. Revisa el correo o pide otro. (' + e.message + ')'); }
+      $('#cn-entrar').disabled = false;
+    });
+    $('#cn-sincronizar').addEventListener('click', () => { $('#modal-cuenta').hidden = true; sincronizar(); });
+    $('#cn-salir').addEventListener('click', async () => { await GM.nube.cerrarSesion(); $('#modal-cuenta').hidden = true; GM.aviso('Sesión cerrada. Los dibujos siguen en este equipo.'); });
     $('#dibujar-aqui').addEventListener('click', () => pedirNombreDibujo(''));
     $('#mn-cancelar').addEventListener('click', () => { $('#modal-nombre').hidden = true; });
     $('#mn-empezar').addEventListener('click', dibujoEnBlanco);
@@ -212,6 +302,7 @@
     $('#imp-guardar').addEventListener('click', guardarImportacion);
     new ResizeObserver(() => { if (A.pantalla === 'importar') pintarImportacion(); }).observe($('#cv-importar').parentElement);
 
+    await GM.nube.iniciar();
     // Pedir al navegador que no borre los dibujos guardados cuando le falte espacio
     try { if (navigator.storage && navigator.storage.persist) navigator.storage.persist(); } catch (e) { /* nada */ }
     A.dibujos = await GM.store.listar();
@@ -220,13 +311,14 @@
       try {
         const m = await crearMuestra();
         A.dibujos.push(m);
-        await GM.store.guardar(m);
+        await persistir(m);
         await GM.store.guardarAjuste('muestraCreada', true);
       } catch (e) { console.warn('No se pudo cargar el ejemplo', e); }
     }
     A.actual = A.dibujos[0] || null;
     const h = (location.hash || '').slice(1);
     ir(['marcar', 'colorear', 'cuento'].includes(h) ? h : 'dibujos');
+    if (GM.nube.correo()) sincronizar();
   }
 
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', iniciar);

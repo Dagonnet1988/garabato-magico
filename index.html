@@ -21,6 +21,7 @@
       <button class="paso" data-ir="colorear" id="paso-colorear"><span class="paso-ic" aria-hidden="true">🖍️</span><span>Colorear</span></button>
       <button class="paso" data-ir="cuento" id="paso-cuento"><span class="paso-ic" aria-hidden="true">📖</span><span>Cuento</span></button>
     </nav>
+    <button class="paso cuenta" id="btn-cuenta" hidden><span class="paso-ic" aria-hidden="true">☁️</span><span class="t">Guardar en la nube</span></button>
   </header>
 
   <!-- 1. Galería de dibujos -->
@@ -214,6 +215,30 @@
   </div>
 </div>
 
+<!-- Cuenta en la nube (para papá o mamá) -->
+<div class="modal" id="modal-cuenta" hidden>
+  <div class="modal-caja" role="dialog" aria-modal="true" aria-labelledby="cn-titulo">
+    <h2 id="cn-titulo">Guardar en la nube</h2>
+    <div id="cu-sin">
+      <p class="ayuda">Con una cuenta, los dibujos y el cuento aparecen en todos tus equipos. Te llega un código al correo; no hay contraseña.</p>
+      <label class="campo" for="cn-correo"><span>Correo de papá o mamá</span>
+        <input type="text" id="cn-correo" inputmode="email" autocomplete="email" autocapitalize="off" spellcheck="false"></label>
+      <div class="fila"><button class="btn" id="cn-cerrar">Cerrar</button><button class="btn primario" id="cn-enviar">Enviarme el código</button></div>
+      <div id="cn-paso2" hidden>
+        <label class="campo" for="cn-codigo"><span>Código del correo</span>
+          <input type="text" id="cn-codigo" inputmode="numeric" autocomplete="one-time-code" maxlength="10"></label>
+        <button class="btn primario" id="cn-entrar">Entrar</button>
+      </div>
+    </div>
+    <div id="cu-con" hidden>
+      <p class="ayuda">Cuenta: <strong id="cn-correo-actual"></strong>. Cada cambio se guarda en la nube y en este equipo.</p>
+      <div class="fila"><button class="btn" id="cn-salir">Cerrar sesión</button><button class="btn primario" id="cn-sincronizar">Sincronizar ahora</button></div>
+      <div class="fila"><button class="btn" id="cn-cerrar2">Cerrar</button></div>
+    </div>
+    <p class="ayuda error" id="cn-error" hidden></p>
+  </div>
+</div>
+
 <!-- Nombre de un dibujo nuevo hecho en la app -->
 <div class="modal" id="modal-nombre" hidden>
   <div class="modal-caja" role="dialog" aria-modal="true" aria-labelledby="mn-titulo">
@@ -229,8 +254,10 @@
 
 <div class="aviso" id="aviso" role="status" aria-live="polite" hidden></div>
 
+<script src="js/config.js"></script>
 <script src="js/util.js"></script>
 <script src="js/store.js"></script>
+<script src="js/nube.js"></script>
 <script src="js/imagen.js"></script>
 <script src="js/lienzo.js"></script>
 <script src="js/rig.js"></script>

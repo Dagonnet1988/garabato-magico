@@ -4,7 +4,7 @@ App web para que una niña fotografíe sus dibujos en papel, marque sus partes c
 
 ## Versión 1: sin IA
 
-- Todo corre en el navegador del iPad. No hay servidor, no hay llamadas a APIs, no hay costos.
+- Todo corre en el navegador del iPad, sin IA y sin costos. La única conexión opcional es la nube (Supabase, plan gratis) para usar los mismos dibujos en varios equipos.
 - La niña **marca cada parte a mano** (cabeza, ojo, ala, pierna, espada...). Esto reemplaza la segmentación automática con IA del prototipo.
 - El cuento lo escribe ella. Las escenas, acciones y fondos salen de reglas con palabras clave, no de un modelo.
 - Si el cuento nombra a alguien sin dibujo (mamá, perro, un nombre propio), la app le pide que lo dibuje y le tome una foto. Esto es preferible a generar imágenes.
@@ -14,7 +14,8 @@ App web para que una niña fotografíe sus dibujos en papel, marque sus partes c
 - HTML + CSS + JavaScript plano, **sin build ni dependencias**. Los scripts son clásicos (no módulos) y comparten el objeto global `GM`, así la app abre incluso desde `file://`.
 - Para probar en local: `python3 -m http.server` en la raíz y abrir `http://localhost:8000`.
 - Publicación pensada para **GitHub Pages** (rama `main`, carpeta raíz) para abrirla en el iPad y "Agregar a pantalla de inicio".
-- Los dibujos se guardan en **IndexedDB** del propio iPad (`js/store.js`). Si se borra el historial de Safari, se pierden. Exportar/importar es trabajo pendiente.
+- Los dibujos se guardan en **IndexedDB** del propio iPad (`js/store.js`); es la copia principal y funciona sin internet.
+- **Nube opcional (Supabase)**: `js/config.js` lleva la URL del proyecto y la clave pública `anon` (vacía = solo local). `js/nube.js` habla con la API REST de Supabase con `fetch` (sin librería): inicio de sesión con código por correo (OTP, sirve dentro del ícono de pantalla de inicio), subida de cambios con cola pendiente que sobrevive sin internet, y al abrir baja lo más nuevo (gana el `modificado` mayor). El esquema y los permisos (RLS por cuenta) están en `supabase/esquema.sql`. Nunca poner la clave `service_role` en el código.
 
 | Archivo | Qué hace |
 |---|---|
@@ -29,7 +30,10 @@ App web para que una niña fotografíe sus dibujos en papel, marque sus partes c
 | `js/colorear.js` | Rellenar formas cerradas, crayón, lápiz (agrega líneas), borrador |
 | `js/cuento.js` | Divide el cuento en escenas, detecta acciones/lugares/personajes faltantes, dibuja la escena y lee en voz alta |
 | `js/muestra.js` | Dibujo de ejemplo Parrot Ninja con sus partes ya marcadas |
-| `js/app.js` | Arranque, galería, importar foto y navegación |
+| `js/app.js` | Arranque, galería, importar foto, cuenta en la nube y navegación |
+| `js/config.js` | URL y clave pública de Supabase (vacío = sin nube) |
+| `js/nube.js` | Sincronización con Supabase: sesión por código, cola de cambios, subir/bajar dibujos y cuento |
+| `supabase/esquema.sql` | Tablas `dibujos` y `ajustes`, bucket `dibujos` y reglas RLS |
 
 ### Modelo de datos de un dibujo
 
@@ -52,4 +56,4 @@ App web para que una niña fotografíe sus dibujos en papel, marque sus partes c
 ## Ideas para después (no v1)
 
 - **IA opcional**: el dueño ya tiene una clave de la API de Claude de otra app que se puede reutilizar. La clave **nunca** va en el código web: debe vivir en un servidor pequeño (por ejemplo una función serverless) con límite de gasto diario. Usos previstos: sugerir las partes de un dibujo nuevo, ayudar con el cuento, generar personajes al estilo de la niña. El costo importa porque las sesiones de una niña pueden ser largas.
-- Exportar/importar dibujos y cuentos, varios cuentos guardados, grabar la voz de la niña, exportar el cuento como video.
+- Varios cuentos guardados, grabar la voz de la niña, exportar el cuento como video.

@@ -38,7 +38,7 @@
   /** Convierte un dibujo en memoria (con canvases) a un registro guardable. */
   async function aRegistro(d) {
     return {
-      id: d.id, nombre: d.nombre, w: d.w, h: d.h, creado: d.creado, modificado: Date.now(),
+      id: d.id, nombre: d.nombre, w: d.w, h: d.h, creado: d.creado, modificado: d.modificado || Date.now(),
       tinta: await GM.canvasABlob(d.tinta),
       color: d.colorUsado ? await GM.canvasABlob(d.color) : null,
       etiquetas: d.etiquetas,
