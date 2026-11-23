@@ -25,21 +25,12 @@ Con GitHub Pages activado (Settings → Pages → rama `main`, carpeta `/ (root)
 
 Los dibujos se guardan en el propio iPad. Ojo: Safari y el ícono de pantalla de inicio guardan por separado, así que conviene usar siempre el mismo.
 
-## Guardar en la nube (opcional, para usar varios equipos)
+## Guardar en la nube (para usar varios equipos)
 
-1. Crea una cuenta y un proyecto gratis en [supabase.com](https://supabase.com).
-2. En **SQL Editor**, pega todo `supabase/esquema.sql` y dale **Run**.
-3. En **Authentication → Email Templates → Magic Link**, agrega `{{ .Token }}` al mensaje para que el correo traiga el código de 6 números.
-4. En **Authentication → URL Configuration**, pon como *Site URL* `https://dagonnet1988.github.io/garabato-magico/`.
-5. Copia la **Project URL** y la clave **anon public** (Project Settings → API) en `js/config.js`.
+La app ya está conectada a Supabase. En cada equipo:
 
-Luego, en la app, toca **☁️ Guardar en la nube**, escribe tu correo y el código que te llega. En cada equipo se hace una sola vez.
+1. Toca **☁️ Guardar en la nube** (arriba a la derecha).
+2. La primera vez, escribe correo y contraseña y toca **Crear cuenta nueva**. Llega un correo de Supabase: toca el enlace para confirmar.
+3. Vuelve a la app y toca **Entrar**. En los demás equipos, solo **Entrar** con el mismo correo y contraseña.
 
-## Probar en el computador
-
-```bash
-python3 -m http.server 8000
-# abrir http://localhost:8000
-```
-
-No hay que instalar nada: es HTML, CSS y JavaScript sin build.
+Para montar otro proyecto de Supabase: pega `supabase/esquema.sql` en el SQL Editor, pon la URL de la app como *Site URL* en Authentication → URL Configuration, y copia la Project URL y la clave publishable (o anon) en `js/config.js`.

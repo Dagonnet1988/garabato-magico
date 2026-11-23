@@ -220,15 +220,14 @@
   <div class="modal-caja" role="dialog" aria-modal="true" aria-labelledby="cn-titulo">
     <h2 id="cn-titulo">Guardar en la nube</h2>
     <div id="cu-sin">
-      <p class="ayuda">Con una cuenta, los dibujos y el cuento aparecen en todos tus equipos. Te llega un código al correo; no hay contraseña.</p>
+      <p class="ayuda">Con una cuenta, los dibujos y el cuento aparecen en todos tus equipos. Usa el mismo correo y contraseña en cada uno.</p>
       <label class="campo" for="cn-correo"><span>Correo de papá o mamá</span>
-        <input type="text" id="cn-correo" inputmode="email" autocomplete="email" autocapitalize="off" spellcheck="false"></label>
-      <div class="fila"><button class="btn" id="cn-cerrar">Cerrar</button><button class="btn primario" id="cn-enviar">Enviarme el código</button></div>
-      <div id="cn-paso2" hidden>
-        <label class="campo" for="cn-codigo"><span>Código del correo</span>
-          <input type="text" id="cn-codigo" inputmode="numeric" autocomplete="one-time-code" maxlength="10"></label>
-        <button class="btn primario" id="cn-entrar">Entrar</button>
-      </div>
+        <input type="text" id="cn-correo" inputmode="email" autocomplete="username" autocapitalize="off" spellcheck="false"></label>
+      <label class="campo" for="cn-clave"><span>Contraseña (6 letras o más)</span>
+        <input type="password" id="cn-clave" autocomplete="current-password"></label>
+      <button class="btn primario" id="cn-entrar">Entrar</button>
+      <div class="fila"><button class="btn" id="cn-cerrar">Cerrar</button><button class="btn" id="cn-crear">Crear cuenta nueva</button></div>
+      <p class="ayuda ok" id="cn-ok" hidden></p>
     </div>
     <div id="cu-con" hidden>
       <p class="ayuda">Cuenta: <strong id="cn-correo-actual"></strong>. Cada cambio se guarda en la nube y en este equipo.</p>

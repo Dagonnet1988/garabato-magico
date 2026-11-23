@@ -4,7 +4,7 @@
 window.GM = window.GM || {};
 GM.CONFIG = {
   supabase: {
-    url: '',   // ej. https://abcdefghijk.supabase.co
-    anon: '',  // Project Settings → API → anon public
+    url: 'https://evkivmndzjwdiojmuqvh.supabase.co',
+    anon: 'sb_publishable_ly1gD1cmvqv-LHSzCQgdTA_nxTrWmQ7', // clave pública (publishable / anon)
   },
 };

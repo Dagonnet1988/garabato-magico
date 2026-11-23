@@ -211,7 +211,7 @@
   function abrirCuenta() {
     const con = !!GM.nube.correo();
     $('#cu-sin').hidden = con; $('#cu-con').hidden = !con;
-    $('#cn-paso2').hidden = true; $('#cn-error').hidden = true;
+    $('#cn-ok').hidden = true; $('#cn-error').hidden = true;
     $('#cn-correo-actual').textContent = GM.nube.correo();
     $('#modal-cuenta').hidden = false;
   }
@@ -268,29 +268,47 @@
     $('#btn-cuenta').addEventListener('click', abrirCuenta);
     $('#cn-cerrar').addEventListener('click', () => { $('#modal-cuenta').hidden = true; });
     $('#cn-cerrar2').addEventListener('click', () => { $('#modal-cuenta').hidden = true; });
-    $('#cn-enviar').addEventListener('click', async () => {
-      const email = $('#cn-correo').value.trim();
-      if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) { errorCuenta('Escribe un correo válido.'); return; }
-      $('#cn-enviar').disabled = true;
-      try {
-        await GM.nube.enviarCodigo(email);
-        $('#cn-error').hidden = true;
-        $('#cn-paso2').hidden = false;
-        $('#cn-codigo').focus();
-      } catch (e) { errorCuenta('No se pudo enviar el correo: ' + e.message); }
-      $('#cn-enviar').disabled = false;
-    });
-    $('#cn-entrar').addEventListener('click', async () => {
-      const email = $('#cn-correo').value.trim(), codigo = $('#cn-codigo').value.replace(/\D/g, '');
-      if (codigo.length < 6) { errorCuenta('El código tiene 6 números o más.'); return; }
+    const datosCuenta = () => {
+      const email = $('#cn-correo').value.trim(), clave = $('#cn-clave').value;
+      if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) { errorCuenta('Escribe un correo válido.'); return null; }
+      if (clave.length < 6) { errorCuenta('La contraseña necesita 6 letras o más.'); return null; }
+      return { email, clave };
+    };
+    const traducir = (m) => /invalid login/i.test(m) ? 'Correo o contraseña equivocados.'
+      : /not confirmed/i.test(m) ? 'Falta confirmar el correo: abre el mensaje de Supabase y toca el enlace. Luego toca «Entrar».'
+      : /already registered|already exists/i.test(m) ? 'Ese correo ya tiene cuenta: toca «Entrar».'
+      : /rate limit/i.test(m) ? 'Demasiados intentos. Espera un minuto y prueba otra vez.'
+      : m;
+    const entrar = async () => {
+      const c = datosCuenta(); if (!c) return;
       $('#cn-entrar').disabled = true;
       try {
-        await GM.nube.verificarCodigo(email, codigo);
-        $('#modal-cuenta').hidden = true;
+        await GM.nube.entrar(c.email, c.clave);
+        $('#modal-cuenta').hidden = true; $('#cn-clave').value = '';
         GM.aviso('¡Listo! Tus dibujos se guardan en la nube');
         sincronizar();
-      } catch (e) { errorCuenta('Ese código no sirvió. Revisa el correo o pide otro. (' + e.message + ')'); }
+      } catch (e) { errorCuenta(traducir(e.message)); }
       $('#cn-entrar').disabled = false;
+    };
+    $('#cn-entrar').addEventListener('click', entrar);
+    $('#cn-clave').addEventListener('keydown', (e) => { if (e.key === 'Enter') entrar(); });
+    $('#cn-crear').addEventListener('click', async () => {
+      const c = datosCuenta(); if (!c) return;
+      $('#cn-crear').disabled = true;
+      try {
+        const lista = await GM.nube.crearCuenta(c.email, c.clave);
+        if (lista) {
+          $('#modal-cuenta').hidden = true; $('#cn-clave').value = '';
+          GM.aviso('¡Cuenta creada! Tus dibujos se guardan en la nube');
+          sincronizar();
+        } else {
+          $('#cn-error').hidden = true;
+          const ok = $('#cn-ok');
+          ok.textContent = 'Te enviamos un correo. Toca el enlace para confirmar y luego vuelve aquí y toca «Entrar».';
+          ok.hidden = false;
+        }
+      } catch (e) { errorCuenta(traducir(e.message)); }
+      $('#cn-crear').disabled = false;
     });
     $('#cn-sincronizar').addEventListener('click', () => { $('#modal-cuenta').hidden = true; sincronizar(); });
     $('#cn-salir').addEventListener('click', async () => { await GM.nube.cerrarSesion(); $('#modal-cuenta').hidden = true; GM.aviso('Sesión cerrada. Los dibujos siguen en este equipo.'); });

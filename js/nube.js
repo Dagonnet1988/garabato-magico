@@ -195,29 +195,28 @@
       window.addEventListener('online', () => { if (sesion) this.sincronizar(); });
     },
 
-    async enviarCodigo(email) {
-      await pedir('/auth/v1/otp', {
+    /** Entrar con correo y contraseña. */
+    async entrar(email, clave) {
+      const r = await pedir('/auth/v1/token?grant_type=password', {
         method: 'POST', auth: false, headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email, create_user: true }),
+        body: JSON.stringify({ email, password: clave }),
       });
+      guardarSesion(desdeRespuestaAuth(await r.json()));
+      avisarEstado('listo');
     },
 
-    async verificarCodigo(email, codigo) {
-      let r;
-      try {
-        r = await pedir('/auth/v1/verify', {
-          method: 'POST', auth: false, headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ type: 'email', email, token: codigo }),
-        });
-      } catch (e) {
-        r = await pedir('/auth/v1/verify', {
-          method: 'POST', auth: false, headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ type: 'magiclink', email, token: codigo }),
-        });
-      }
-      guardarSesion(desdeRespuestaAuth(await r.json()));
-      // lo que ya hay en este equipo se sube en la primera sincronización
-      avisarEstado('listo');
+    /** Crear cuenta. Devuelve true si ya quedó con sesión, false si falta confirmar el correo. */
+    async crearCuenta(email, clave) {
+      const destino = location.origin + location.pathname;
+      const r = await pedir('/auth/v1/signup?redirect_to=' + encodeURIComponent(destino), {
+        method: 'POST', auth: false, headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email, password: clave }),
+      });
+      const j = await r.json();
+      if (j.access_token) { guardarSesion(desdeRespuestaAuth(j)); avisarEstado('listo'); return true; }
+      // Supabase responde sin error aunque el correo ya exista (por seguridad): sin identidades = ya registrado
+      if (j.identities && j.identities.length === 0) throw new Error('already registered');
+      return false;
     },
 
     async cerrarSesion() {

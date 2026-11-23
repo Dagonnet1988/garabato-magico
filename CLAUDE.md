@@ -15,7 +15,7 @@ App web para que una niña fotografíe sus dibujos en papel, marque sus partes c
 - Para probar en local: `python3 -m http.server` en la raíz y abrir `http://localhost:8000`.
 - Publicación pensada para **GitHub Pages** (rama `main`, carpeta raíz) para abrirla en el iPad y "Agregar a pantalla de inicio".
 - Los dibujos se guardan en **IndexedDB** del propio iPad (`js/store.js`); es la copia principal y funciona sin internet.
-- **Nube opcional (Supabase)**: `js/config.js` lleva la URL del proyecto y la clave pública `anon` (vacía = solo local). `js/nube.js` habla con la API REST de Supabase con `fetch` (sin librería): inicio de sesión con código por correo (OTP, sirve dentro del ícono de pantalla de inicio), subida de cambios con cola pendiente que sobrevive sin internet, y al abrir baja lo más nuevo (gana el `modificado` mayor). El esquema y los permisos (RLS por cuenta) están en `supabase/esquema.sql`. Nunca poner la clave `service_role` en el código.
+- **Nube opcional (Supabase)**: `js/config.js` lleva la URL del proyecto y la clave pública `anon` (vacía = solo local). `js/nube.js` habla con la API REST de Supabase con `fetch` (sin librería): inicio de sesión con correo y contraseña (sirve dentro del ícono de pantalla de inicio; el plan gratis no deja editar el correo de código sin SMTP propio), subida de cambios con cola pendiente que sobrevive sin internet, y al abrir baja lo más nuevo (gana el `modificado` mayor). El esquema y los permisos (RLS por cuenta) están en `supabase/esquema.sql`. Nunca poner la clave `service_role` en el código.
 
 | Archivo | Qué hace |
 |---|---|
@@ -32,7 +32,7 @@ App web para que una niña fotografíe sus dibujos en papel, marque sus partes c
 | `js/muestra.js` | Dibujo de ejemplo Parrot Ninja con sus partes ya marcadas |
 | `js/app.js` | Arranque, galería, importar foto, cuenta en la nube y navegación |
 | `js/config.js` | URL y clave pública de Supabase (vacío = sin nube) |
-| `js/nube.js` | Sincronización con Supabase: sesión por código, cola de cambios, subir/bajar dibujos y cuento |
+| `js/nube.js` | Sincronización con Supabase: sesión con correo y contraseña, cola de cambios, subir/bajar dibujos y cuento |
 | `supabase/esquema.sql` | Tablas `dibujos` y `ajustes`, bucket `dibujos` y reglas RLS |
 
 ### Modelo de datos de un dibujo
