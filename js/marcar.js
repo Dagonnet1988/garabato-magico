@@ -5,7 +5,7 @@
   'use strict';
   const $ = GM.$;
   const S = {
-    d: null, activa: null, herr: 'pincel', tam: 18, prueba: false, accion: 'bailar',
+    d: null, activa: null, herr: 'pincel', tam: 18, prueba: false, accion: 'bailar', acomodar: false, ac: 'girar', agarre: null, elegida: null,
     pila: [], trazo: null, lazo: null, clavo: false, overlay: null, overlaySucio: true,
     alfa: null, alfaVer: -1, comps: null, compsVer: -1, t0: 0, anim: 0,
   };
@@ -119,6 +119,10 @@
   function dibujar(ctx) {
     const d = S.d;
     if (!d) return;
+    if (S.acomodar) {
+      GM.dibujarRig(ctx, GM.rig(d), 0, 'pose');
+      return;
+    }
     if (S.prueba) {
       const t = (performance.now() - S.t0) / 1000;
       const rig = GM.rig(d);
@@ -135,6 +139,18 @@
 
   function encima(ctx, lz) {
     if (!S.d || S.prueba) return;
+    if (S.acomodar) {
+      const rig = GM.rig(S.d), p = S.elegida && rig.porId.get(S.elegida);
+      if (!p) return;
+      const m = GM.matricesRig(rig, 0, 'pose', GM.mat.id()).get(p.id);
+      const q = GM.mat.aplicar(m, p.pivote.x, p.pivote.y), sc = lz.aPantalla(q[0], q[1]);
+      ctx.save();
+      ctx.beginPath(); ctx.arc(sc.x, sc.y, 14, 0, Math.PI * 2); ctx.fillStyle = 'rgba(255,255,255,.92)'; ctx.fill();
+      ctx.lineWidth = 4; ctx.strokeStyle = p.datos.color; ctx.stroke();
+      ctx.beginPath(); ctx.arc(sc.x, sc.y, 5, 0, Math.PI * 2); ctx.fillStyle = p.datos.color; ctx.fill();
+      ctx.restore();
+      return;
+    }
     if (S.lazo && S.lazo.length > 1) {
       ctx.save();
       ctx.lineWidth = 4; ctx.setLineDash([10, 8]); ctx.lineCap = 'round';
@@ -172,6 +188,7 @@
   const tocar = {
     inicio(pt) {
       if (!S.d || S.prueba) return false;
+      if (S.acomodar) return agarrar(pt);
       const pv = clavoActivo();
       if (pv) {
         const s = L.aPantalla(pv.x, pv.y), r = L.cv.getBoundingClientRect();
@@ -189,6 +206,7 @@
       return true;
     },
     mover(pt) {
+      if (S.agarre) { arrastrar(pt); return; }
       if (S.clavo) {
         const p = parte(S.activa);
         p.pivote = { x: Math.max(0, Math.min(S.d.w, pt.x)), y: Math.max(0, Math.min(S.d.h, pt.y)) };
@@ -202,6 +220,7 @@
       S.overlaySucio = true; L.pedir();
     },
     fin() {
+      if (S.agarre) { S.agarre = null; GM.app.guardarLuego(S.d); return; }
       if (S.clavo) { S.clavo = false; S.d.version++; GM.app.guardarLuego(S.d); reconstruirLuego(); return; }
       if (S.lazo) {
         const n = GM.rellenarPoligono(S.d, S.lazo.map((p) => [p.x, p.y]), S.activa);
@@ -214,11 +233,63 @@
       cambiado();
     },
     cancelar() {
+      S.agarre = null;
       const u = S.pila.pop();
       if (u) restaurar(u);
       S.trazo = null; S.lazo = null; S.clavo = false;
     },
   };
+
+  /* ---------- acomodar (postura inicial) ---------- */
+
+  function agarrar(pt) {
+    const rig = GM.rig(S.d);
+    const mats = GM.matricesRig(rig, 0, 'pose', GM.mat.id());
+    const p = GM.parteEn(rig, mats, pt.x, pt.y, Math.max(4, Math.round(14 * L.pxPorCss())));
+    if (!p) { GM.aviso('Toca una parte marcada para moverla'); return false; }
+    recordar();
+    S.elegida = p.id;
+    const pd = p.datos;
+    pd.reposo = Object.assign({ r: 0, dx: 0, dy: 0 }, pd.reposo || {});
+    const piv = GM.mat.aplicar(mats.get(p.id), p.pivote.x, p.pivote.y);
+    const pm = p.padre !== null && mats.has(p.padre) ? mats.get(p.padre) : GM.mat.id();
+    S.agarre = { p, pd, piv, pm, ini: pt, r0: pd.reposo.r, dx0: pd.reposo.dx, dy0: pd.reposo.dy,
+      a0: Math.atan2(pt.y - piv[1], pt.x - piv[0]) };
+    L.pedir();
+    return true;
+  }
+
+  function arrastrar(pt) {
+    const g = S.agarre;
+    if (S.ac === 'girar') {
+      const a = Math.atan2(pt.y - g.piv[1], pt.x - g.piv[0]);
+      g.pd.reposo.r = g.r0 + (a - g.a0);
+    } else {
+      const inv = GM.mat.inversa(g.pm);
+      const dx = pt.x - g.ini.x, dy = pt.y - g.ini.y;
+      g.pd.reposo.dx = g.dx0 + inv[0] * dx + inv[2] * dy;
+      g.pd.reposo.dy = g.dy0 + inv[1] * dx + inv[3] * dy;
+    }
+    L.pedir();
+  }
+
+  function elegirAc(a) {
+    S.ac = a;
+    GM.$$('#mk-acomodo .herr').forEach((b) => b.setAttribute('aria-pressed', String(b.dataset.ac === a)));
+    $('#mk-pista').textContent = a === 'girar' ? 'Arrastra una parte para girarla alrededor de su clavito' : 'Arrastra una parte para moverla';
+  }
+
+  function acomodar(on) {
+    if (on && S.prueba) probar(false);
+    S.acomodar = on;
+    $('#mk-acomodo').hidden = !on;
+    $('#mk-herramientas').hidden = on;
+    $('#mk-nueva').hidden = on;
+    $('#mk-arriba').hidden = on;
+    $('#mk-partes').parentElement.hidden = on;
+    if (on) { GM.rig(S.d); elegirAc(S.ac); } else actualizarPista();
+    L.pedir();
+  }
 
   function varita(pt) {
     const c = componentes(), w = S.d.w, h = S.d.h;
@@ -446,6 +517,15 @@
       $('#mk-nueva').addEventListener('click', pedirParte);
       $('#mk-deshacer').addEventListener('click', () => { const u = S.pila.pop(); if (u) restaurar(u); else GM.aviso('No hay nada que deshacer'); });
       $('#mk-probar').addEventListener('click', () => probar(true));
+      $('#mk-acomodar').addEventListener('click', () => acomodar(true));
+      $('#mk-a-listo').addEventListener('click', () => acomodar(false));
+      GM.$$('#mk-acomodo .herr').forEach((b) => b.addEventListener('click', () => elegirAc(b.dataset.ac)));
+      $('#mk-a-deshacer').addEventListener('click', () => { const u = S.pila.pop(); if (u) restaurar(u); else GM.aviso('No hay nada que deshacer'); });
+      $('#mk-a-reiniciar').addEventListener('click', () => {
+        recordar();
+        S.d.partes.forEach((p) => { p.reposo = null; });
+        GM.app.guardarLuego(S.d); L.pedir();
+      });
       $('#mk-volver').addEventListener('click', () => probar(false));
       $('#mk-zoom-mas').addEventListener('click', () => L.zoom(1.4));
       $('#mk-zoom-menos').addEventListener('click', () => L.zoom(1 / 1.4));
@@ -463,12 +543,13 @@
       S.d = d;
       S.overlaySucio = true;
       probar(false);
+      acomodar(false);
       pintarPartes();
       L.ajustado = false;
       L.redimensionar();
       GM.rig(d);
       L.pedir();
     },
-    cerrar() { probar(false); },
+    cerrar() { probar(false); acomodar(false); },
   };
 })(window.GM);

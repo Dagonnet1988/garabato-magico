@@ -194,17 +194,18 @@
     const n = ds.length;
     ds.forEach((d, k) => {
       const rig = GM.rig(d);
-      const bh = rig.caja.y1 - rig.caja.y0 || 1, bw = rig.caja.x1 - rig.caja.x0 || 1;
+      const caja = GM.cajaPose(rig);
+      const bh = caja.y1 - caja.y0 || 1, bw = caja.x1 - caja.x0 || 1;
       const alto = H * (n > 2 ? 0.42 : 0.52);
       const s = Math.min(alto / bh, (W / Math.max(n, 1.6)) * 0.8 / bw);
       const cx = n === 1 ? W * 0.5 : W * (0.25 + (0.5 * k) / (n - 1));
       const acc = k === 0 ? esc.accion : (esc.accion === 'dormir' ? 'dormir' : esc.ids.includes(d.id) ? esc.accion : 'feliz');
       ctx.save();
-      ctx.translate(cx - rig.pie.x * s, suelo + 10 - rig.pie.y * s);
+      ctx.translate(cx - caja.pie.x * s, suelo + 10 - caja.pie.y * s);
       ctx.scale(s, s);
       // sombra
       ctx.fillStyle = 'rgba(0,0,0,.12)';
-      ctx.beginPath(); ctx.ellipse(rig.pie.x, rig.pie.y, bw * 0.35, bh * 0.04, 0, 0, Math.PI * 2); ctx.fill();
+      ctx.beginPath(); ctx.ellipse(caja.pie.x, caja.pie.y, bw * 0.35, bh * 0.04, 0, 0, Math.PI * 2); ctx.fill();
       if (esc.lugar === 'noche') { ctx.shadowColor = 'rgba(255,255,240,.85)'; ctx.shadowBlur = 10; }
       GM.dibujarRig(ctx, rig, t + k * 0.7, acc, { raiz: GM.raiz(rig, t + k * 0.7, acc, W / s * 0.5) });
       ctx.shadowBlur = 0; ctx.shadowColor = 'transparent';
@@ -212,7 +213,7 @@
         ctx.fillStyle = '#ffffff'; ctx.font = '700 ' + Math.round(60 / s * 0.6) + 'px Fredoka, sans-serif';
         const z = (t % 2) / 2;
         ctx.globalAlpha = 1 - z;
-        ctx.fillText('Z z z', rig.caja.x1, rig.caja.y0 - z * 80 / s);
+        ctx.fillText('Z z z', caja.x1, caja.y0 - z * 80 / s);
         ctx.globalAlpha = 1;
       }
       ctx.restore();

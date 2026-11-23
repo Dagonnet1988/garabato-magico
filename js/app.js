@@ -186,6 +186,8 @@
     $('#imp-guardar').addEventListener('click', guardarImportacion);
     new ResizeObserver(() => { if (A.pantalla === 'importar') pintarImportacion(); }).observe($('#cv-importar').parentElement);
 
+    // Pedir al navegador que no borre los dibujos guardados cuando le falte espacio
+    try { if (navigator.storage && navigator.storage.persist) navigator.storage.persist(); } catch (e) { /* nada */ }
     A.dibujos = await GM.store.listar();
     A.dibujos.forEach((d) => { d.version = 1; d.tintaVer = 1; });
     if (!A.dibujos.length && !(await GM.store.leerAjuste('muestraCreada'))) {

@@ -223,6 +223,12 @@
     }
     partes.slice().sort((a, b) => (a.tipo === 'cuerpo' ? -1 : 0) - (b.tipo === 'cuerpo' ? -1 : 0) || b.area - a.area).forEach(poner);
 
+    // Relleno del hueco: lo que queda detrás de una parte cuando se mueve toma el color de alrededor
+    if (d.colorUsado && partes.length) {
+      const colorPx = d.color.getContext('2d', { willReadFrequently: true }).getImageData(0, 0, w, h).data;
+      for (const p of partes) p.relleno = hueco(p.id, eff, colorPx, pared, w, h);
+    }
+
     const base = info.get(0);
     const rig = {
       w, h, partes: orden, porId, centro,
@@ -234,11 +240,60 @@
     return rig;
   };
 
+  /** Llena la zona de una parte con el color que la rodea (sin contar las líneas), para tapar el hueco. */
+  function hueco(id, eff, col, pared, w, h) {
+    let x0 = w, y0 = h, x1 = -1, y1 = -1;
+    for (let p = 0; p < w * h; p++) {
+      if (eff[p] !== id) continue;
+      const x = p % w, y = (p - x) / w;
+      if (x < x0) x0 = x; if (x > x1) x1 = x; if (y < y0) y0 = y; if (y > y1) y1 = y;
+    }
+    if (x1 < 0) return null;
+    const cw = x1 - x0 + 1, ch = y1 - y0 + 1;
+    const lleno = new Uint8Array(cw * ch), cola = new Int32Array(cw * ch);
+    const out = new Uint8ClampedArray(cw * ch * 4);
+    let ini = 0, fin = 0, opacos = 0;
+    for (let y = y0; y <= y1; y++) for (let x = x0; x <= x1; x++) {
+      const p = y * w + x;
+      if (eff[p] !== id) continue;
+      const vec = [x > 0 ? p - 1 : -1, x < w - 1 ? p + 1 : -1, y > 0 ? p - w : -1, y < h - 1 ? p + w : -1];
+      for (const q of vec) {
+        if (q < 0 || eff[q] === id) continue;
+        const l = (y - y0) * cw + (x - x0), o = l * 4, s = q * 4;
+        out[o] = col[s]; out[o + 1] = col[s + 1]; out[o + 2] = col[s + 2]; out[o + 3] = col[s + 3];
+        if (col[s + 3] > 20) opacos++;
+        lleno[l] = 1; cola[fin++] = l;
+        break;
+      }
+    }
+    if (!opacos) return null;
+    // 1) el color avanza sin cruzar líneas (así el color del cuerpo no se sale de su borde)
+    // 2) luego se completan las líneas y los huequitos encerrados
+    for (let fase = 0; fase < 2; fase++) {
+      if (fase === 1) { ini = 0; fin = 0; for (let l = 0; l < cw * ch; l++) if (lleno[l]) cola[fin++] = l; }
+      while (ini < fin) {
+        const l = cola[ini++], lx = l % cw, ly = (l - lx) / cw;
+        const vec = [lx > 0 ? l - 1 : -1, lx < cw - 1 ? l + 1 : -1, ly > 0 ? l - cw : -1, ly < ch - 1 ? l + cw : -1];
+        for (const m of vec) {
+          if (m < 0 || lleno[m]) continue;
+          const mx = m % cw, my = (m - mx) / cw, q = (my + y0) * w + (mx + x0);
+          if (eff[q] !== id || (fase === 0 && pared[q])) continue;
+          lleno[m] = 1; cola[fin++] = m;
+          out[m * 4] = out[l * 4]; out[m * 4 + 1] = out[l * 4 + 1]; out[m * 4 + 2] = out[l * 4 + 2]; out[m * 4 + 3] = out[l * 4 + 3];
+        }
+      }
+    }
+    const c = GM.crearCanvas(cw, ch);
+    c.getContext('2d').putImageData(new ImageData(out, cw, ch), 0, 0);
+    return { canvas: c, x: x0, y: y0 };
+  }
+
   function sierra(t) { const f = t - Math.floor(t); return f < 0.35 ? f / 0.35 : 1 - (f - 0.35) / 0.65; }
 
   /** Pose local de una parte: [giro, escalaX, escalaY, dx, dy]. */
   function pose(p, t, acc, rig) {
     let r = 0, sx = 1, sy = 1, dx = 0, dy = 0;
+    if (acc === 'pose') return [r, sx, sy, dx, dy];
     const f = p.fase || 0, lado = p.lado || 1;
     const mueve = acc === 'caminar' || acc === 'correr' || acc === 'saltar' || acc === 'bailar';
     switch (p.mov) {
@@ -298,7 +353,9 @@
 
   /** Movimiento del personaje completo según la acción. Devuelve matriz alrededor de los pies. */
   GM.raiz = function (rig, t, acc, ancho) {
-    const H = rig.caja.y1 - rig.caja.y0 || rig.h;
+    const cp = GM.cajaPose(rig);
+    const pie = cp.pie;
+    const H = cp.y1 - cp.y0 || rig.h;
     let dx = 0, dy = 0, r = 0, sx = 1, sy = 1;
     switch (acc) {
       case 'saltar': {
@@ -317,19 +374,21 @@
       case 'triste': r = 0.04; sy = 0.97; break;
       case 'dormir': r = -0.06; sy = 0.98 + Math.sin(t * 1.4) * 0.01; break;
       case 'mirar': r = Math.sin(t * 1.1) * 0.04; break;
+      case 'pose': break;
       default: dy = -Math.abs(Math.sin(t * 1.8)) * H * 0.008;
     }
-    return GM.mat.alrededor(rig.pie.x, rig.pie.y, r, sx, sy, dx, dy);
+    return GM.mat.alrededor(pie.x, pie.y, r, sx, sy, dx, dy);
   };
 
-  /** Dibuja el personaje animado con la transformación actual del contexto como base. */
-  GM.dibujarRig = function (ctx, rig, t, acc, opciones) {
-    const o = opciones || {};
-    const T = ctx.getTransform();
-    const B = GM.mat.mul([T.a, T.b, T.c, T.d, T.e, T.f], o.raiz || GM.mat.id());
+  /** Postura de reposo que la niña acomodó con el dedo (giro y desplazamiento). */
+  function reposo(p) {
+    const r = p.datos.reposo;
+    return r && (r.r || r.dx || r.dy) ? GM.mat.alrededor(p.pivote.x, p.pivote.y, r.r || 0, 1, 1, r.dx || 0, r.dy || 0) : null;
+  }
+
+  /** Matriz de cada parte (en coordenadas del dibujo, multiplicadas por B). */
+  GM.matricesRig = function (rig, t, acc, B) {
     const mats = new Map();
-    const set = (m) => ctx.setTransform(m[0], m[1], m[2], m[3], m[4], m[5]);
-    if (rig.base) { set(B); ctx.drawImage(rig.base.canvas, rig.base.x, rig.base.y); }
     for (const p of rig.partes) {
       const pm = p.padre !== null && mats.has(p.padre) ? mats.get(p.padre) : B;
       const [r, sx, sy, dx, dy] = pose(p, t, acc, rig);
@@ -341,11 +400,77 @@
       } else {
         local = GM.mat.alrededor(p.pivote.x, p.pivote.y, r, sx, sy, dx, dy);
       }
-      const m = GM.mat.mul(pm, local);
-      mats.set(p.id, m);
-      set(m);
+      const rp = reposo(p);
+      if (rp) local = GM.mat.mul(rp, local);
+      mats.set(p.id, GM.mat.mul(pm, local));
+    }
+    return mats;
+  };
+
+  /** Caja del personaje en su postura de reposo (para apoyar los pies en el suelo). */
+  GM.cajaPose = function (rig) {
+    const firma = rig.partes.map((p) => JSON.stringify(p.datos.reposo || 0) + p.pivote.x + ',' + p.pivote.y).join('|');
+    if (rig._cajaFirma === firma) return rig._caja;
+    const mats = GM.matricesRig(rig, 0, 'pose', GM.mat.id());
+    let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
+    const meter = (m, bx, by, bw, bh) => {
+      [[bx, by], [bx + bw, by], [bx, by + bh], [bx + bw, by + bh]].forEach(([x, y]) => {
+        const q = GM.mat.aplicar(m, x, y);
+        if (q[0] < x0) x0 = q[0]; if (q[0] > x1) x1 = q[0]; if (q[1] < y0) y0 = q[1]; if (q[1] > y1) y1 = q[1];
+      });
+    };
+    if (rig.base) meter(GM.mat.id(), rig.base.x, rig.base.y, rig.base.canvas.width, rig.base.canvas.height);
+    for (const p of rig.partes) meter(mats.get(p.id), p.x, p.y, p.canvas.width, p.canvas.height);
+    if (!isFinite(x0)) { x0 = rig.caja.x0; y0 = rig.caja.y0; x1 = rig.caja.x1; y1 = rig.caja.y1; }
+    rig._caja = { x0, y0, x1, y1, pie: { x: (x0 + x1) / 2, y: y1 } };
+    rig._cajaFirma = firma;
+    return rig._caja;
+  };
+
+  /** Dibuja el personaje animado con la transformación actual del contexto como base. */
+  GM.dibujarRig = function (ctx, rig, t, acc, opciones) {
+    const o = opciones || {};
+    const T = ctx.getTransform();
+    const B = GM.mat.mul([T.a, T.b, T.c, T.d, T.e, T.f], o.raiz || GM.mat.id());
+    const mats = GM.matricesRig(rig, t, acc, B);
+    const set = (m) => ctx.setTransform(m[0], m[1], m[2], m[3], m[4], m[5]);
+    if (rig.base) { set(B); ctx.drawImage(rig.base.canvas, rig.base.x, rig.base.y); }
+    for (const p of rig.partes) {
+      if (p.relleno) {
+        set(p.padre !== null && mats.has(p.padre) ? mats.get(p.padre) : B);
+        ctx.drawImage(p.relleno.canvas, p.relleno.x, p.relleno.y);
+      }
+      set(mats.get(p.id));
       ctx.drawImage(p.canvas, p.x, p.y);
     }
     ctx.setTransform(T);
+  };
+
+  /** Inversa de una matriz afín. */
+  GM.mat.inversa = function (m) {
+    const det = m[0] * m[3] - m[1] * m[2] || 1e-9;
+    const a = m[3] / det, b = -m[1] / det, c = -m[2] / det, d = m[0] / det;
+    return [a, b, c, d, -(a * m[4] + c * m[5]), -(b * m[4] + d * m[5])];
+  };
+
+  /** ¿Qué parte está bajo el dedo? Devuelve la de más arriba. */
+  GM.parteEn = function (rig, mats, x, y, tol) {
+    for (let k = rig.partes.length - 1; k >= 0; k--) {
+      const p = rig.partes[k];
+      const q = GM.mat.aplicar(GM.mat.inversa(mats.get(p.id)), x, y);
+      const lx = Math.round(q[0] - p.x), ly = Math.round(q[1] - p.y);
+      const cw = p.canvas.width, ch = p.canvas.height;
+      if (lx < -tol || ly < -tol || lx >= cw + tol || ly >= ch + tol) continue;
+      if (!p.alfa) {
+        const dd = p.canvas.getContext('2d', { willReadFrequently: true }).getImageData(0, 0, cw, ch).data;
+        p.alfa = new Uint8Array(cw * ch);
+        for (let i = 0; i < cw * ch; i++) p.alfa[i] = dd[i * 4 + 3];
+      }
+      for (let dy = -tol; dy <= tol; dy += 2) for (let dx = -tol; dx <= tol; dx += 2) {
+        const xx = lx + dx, yy = ly + dy;
+        if (xx >= 0 && yy >= 0 && xx < cw && yy < ch && p.alfa[yy * cw + xx] > 40) return p;
+      }
+    }
+    return null;
   };
 })(window.GM);

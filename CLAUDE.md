@@ -37,6 +37,8 @@ App web para que una niña fotografíe sus dibujos en papel, marque sus partes c
 
 - `etiquetas[p]` = id de la parte dueña del píxel (0 = sin marcar, se mueve con todo el cuerpo).
 - Al armar el esqueleto, el interior de una figura cerrada hereda la etiqueta de su contorno, para que el color pintado se mueva con la parte.
+- `reposo: {r, dx, dy}` en una parte es la postura que la niña acomodó con el dedo (modo «Acomodar»); se aplica antes de la animación y define dónde quedan los pies (`GM.cajaPose`).
+- Cada parte con color lleva un `relleno` (color de alrededor, sin cruzar líneas) que se dibuja con su padre para tapar el hueco cuando la parte se mueve.
 - El padre de una parte es la parte más grande con la que se toca; el pivote automático es el punto de la parte más cercano al centro de su padre. La niña puede mover el clavito.
 
 ## Reglas para trabajar aquí
