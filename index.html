@@ -35,6 +35,11 @@
         <span class="nueva-t">Nuevo dibujo</span>
         <span class="nueva-s">Toma o elige una foto</span>
       </label>
+      <button class="tarjeta nueva" id="dibujar-aqui">
+        <span class="nueva-ic" aria-hidden="true">✏️</span>
+        <span class="nueva-t">Dibujar aquí</span>
+        <span class="nueva-s">Con el dedo o el Apple Pencil</span>
+      </button>
     </div>
     <input type="file" id="foto-nueva" accept="image/*" class="oculto">
   </main>
@@ -205,6 +210,19 @@
     <div class="fila">
       <button class="btn peligro" id="me-borrar">Borrar parte</button>
       <button class="btn primario" id="me-listo">Listo</button>
+    </div>
+  </div>
+</div>
+
+<!-- Nombre de un dibujo nuevo hecho en la app -->
+<div class="modal" id="modal-nombre" hidden>
+  <div class="modal-caja" role="dialog" aria-modal="true" aria-labelledby="mn-titulo">
+    <h2 id="mn-titulo">¿Qué vas a dibujar?</h2>
+    <label class="campo" for="mn-nombre"><span>Nombre</span>
+      <input type="text" id="mn-nombre" maxlength="40" placeholder="Por ejemplo: Gato Volador" autocomplete="off"></label>
+    <div class="fila">
+      <button class="btn" id="mn-cancelar">Cancelar</button>
+      <button class="btn primario" id="mn-empezar">Empezar a dibujar</button>
     </div>
   </div>
 </div>

@@ -86,27 +86,49 @@
       if (this.o.encima) { c.setTransform(d, 0, 0, d, 0, 0); this.o.encima(c, this); }
     }
 
+    /** Dedos que cuentan para zoom: si se usa Apple Pencil, los dedos solo hacen zoom y la palma no dibuja. */
+    dedos() { return Array.from(this.punteros.entries()).filter(([, v]) => v.tipo !== 'pen').map(([, v]) => v); }
+
     abajo(e) {
       e.preventDefault();
       try { this.cv.setPointerCapture(e.pointerId); } catch (_) { /* nada */ }
-      this.punteros.set(e.pointerId, { x: e.clientX, y: e.clientY });
-      if (this.punteros.size === 2) {
+      if (e.pointerType === 'pen') { this.usaLapiz = true; this.ultLapiz = performance.now(); }
+      // si el lápiz no se usa hace rato, el dedo vuelve a dibujar
+      if (this.usaLapiz && performance.now() - (this.ultLapiz || 0) > 20000) this.usaLapiz = false;
+      this.punteros.set(e.pointerId, { x: e.clientX, y: e.clientY, tipo: e.pointerType });
+      const dedos = this.dedos();
+      const lapizAbajo = Array.from(this.punteros.values()).some((v) => v.tipo === 'pen');
+      const dedoVale = e.pointerType === 'mouse' || (!lapizAbajo && dedos.length === 1 && this.o.dedoPermitido && this.o.dedoPermitido());
+      if (this.usaLapiz && e.pointerType !== 'pen' && !dedoVale) {
+        // con lápiz: un dedo no dibuja; dos dedos hacen zoom (si el lápiz no está dibujando)
+        if (dedos.length === 2 && !this.trazando) {
+          const [a, b] = dedos;
+          this.gesto = { d: Math.hypot(a.x - b.x, a.y - b.y), mx: (a.x + b.x) / 2, my: (a.y + b.y) / 2 };
+        }
+        return;
+      }
+      if (!this.usaLapiz && this.punteros.size === 2) {
         if (this.trazando) { this.trazando = false; this.o.alTocar && this.o.alTocar.cancelar && this.o.alTocar.cancelar(); }
         const [a, b] = Array.from(this.punteros.values());
         this.gesto = { d: Math.hypot(a.x - b.x, a.y - b.y), mx: (a.x + b.x) / 2, my: (a.y + b.y) / 2 };
         return;
       }
-      if (this.punteros.size > 2 || this.gesto) return;
+      if (this.gesto || (!this.usaLapiz && this.punteros.size > 1)) return;
       if (this.o.alTocar && this.o.alTocar.inicio) {
+        this.trazoId = e.pointerId;
         this.trazando = this.o.alTocar.inicio(this.aDibujo(e.clientX, e.clientY), e) !== false;
       }
     }
 
     mover(e) {
       if (!this.punteros.has(e.pointerId)) return;
-      this.punteros.set(e.pointerId, { x: e.clientX, y: e.clientY });
-      if (this.gesto && this.punteros.size >= 2) {
-        const [a, b] = Array.from(this.punteros.values());
+      const tipo = this.punteros.get(e.pointerId).tipo;
+      if (tipo === 'pen') this.ultLapiz = performance.now();
+      this.punteros.set(e.pointerId, { x: e.clientX, y: e.clientY, tipo });
+      if (this.gesto) {
+        const ds = this.usaLapiz ? this.dedos() : Array.from(this.punteros.values());
+        if (ds.length < 2) return;
+        const [a, b] = ds;
         const d = Math.hypot(a.x - b.x, a.y - b.y), mx = (a.x + b.x) / 2, my = (a.y + b.y) / 2;
         const r = this.cv.getBoundingClientRect();
         this.vista.x += mx - this.gesto.mx; this.vista.y += my - this.gesto.my;
@@ -115,7 +137,7 @@
         this.pedir();
         return;
       }
-      if (this.trazando && this.o.alTocar.mover) {
+      if (this.trazando && e.pointerId === this.trazoId && this.o.alTocar.mover) {
         const ev = e.getCoalescedEvents ? e.getCoalescedEvents() : [e];
         for (const ce of (ev.length ? ev : [e])) this.o.alTocar.mover(this.aDibujo(ce.clientX, ce.clientY), ce);
       }
@@ -124,8 +146,12 @@
     arriba(e, cancelado) {
       if (!this.punteros.has(e.pointerId)) return;
       this.punteros.delete(e.pointerId);
-      if (this.gesto) { if (this.punteros.size === 0) this.gesto = null; return; }
-      if (this.trazando) {
+      if (this.gesto) {
+        const quedan = this.usaLapiz ? this.dedos().length : this.punteros.size;
+        if (quedan < 2) this.gesto = null;
+        return;
+      }
+      if (this.trazando && e.pointerId === this.trazoId) {
         this.trazando = false;
         if (cancelado && this.o.alTocar.cancelar) this.o.alTocar.cancelar();
         else if (this.o.alTocar.fin) this.o.alTocar.fin(this.aDibujo(e.clientX, e.clientY), e);

@@ -76,16 +76,22 @@
     cambiado();
   }
 
-  function trazo(a, b) {
+  /** Con Apple Pencil, apretar más hace la línea más gruesa. */
+  function presion(ev) {
+    if (!ev || ev.pointerType !== 'pen' || !ev.pressure) return 1;
+    return 0.35 + ev.pressure * 1.3;
+  }
+
+  function trazo(a, b, ev) {
     const d = S.d;
-    const r = S.tam * L.pxPorCss();
+    const r = S.tam * L.pxPorCss() * presion(ev);
     const capas = S.herr === 'goma' ? [d.color, d.tinta] : S.herr === 'lapiz' ? [d.tinta] : [d.color];
     capas.forEach((cv) => {
       const c = cv.getContext('2d');
       c.save();
       c.lineCap = 'round'; c.lineJoin = 'round';
       if (S.herr === 'goma') { c.globalCompositeOperation = 'destination-out'; c.lineWidth = r * 1.3; c.strokeStyle = '#000'; }
-      else if (S.herr === 'lapiz') { c.lineWidth = Math.max(2, r * 0.35); c.strokeStyle = '#2a2a35'; }
+      else if (S.herr === 'lapiz') { c.lineWidth = Math.max(1.5, r * 0.35); c.strokeStyle = S.color === '#ffffff' ? '#2a2a35' : S.color; }
       else { c.lineWidth = r; c.strokeStyle = S.color; c.globalAlpha = 0.92; }
       c.beginPath(); c.moveTo(a.x, a.y); c.lineTo(b.x + 0.01, b.y); c.stroke();
       c.restore();
@@ -96,14 +102,14 @@
   }
 
   const tocar = {
-    inicio(pt) {
+    inicio(pt, ev) {
       if (!S.d) return false;
       if (S.herr === 'cubeta') { rellenar(pt); return false; }
       recordar();
-      S.ult = pt; trazo(pt, pt);
+      S.ult = pt; trazo(pt, pt, ev);
       return true;
     },
-    mover(pt) { if (S.ult) { trazo(S.ult, pt); S.ult = pt; } },
+    mover(pt, ev) { if (S.ult) { trazo(S.ult, pt, ev); S.ult = pt; } },
     fin() { S.ult = null; cambiado(); },
     cancelar() { S.ult = null; deshacer(); },
   };
@@ -124,6 +130,8 @@
           ctx.drawImage(S.d.tinta, 0, 0);
         },
         alTocar: tocar,
+        // con Apple Pencil, el dedo igual puede rellenar con un toque
+        dedoPermitido: () => S.herr === 'cubeta',
       });
       const pal = $('#co-paleta');
       COLORES.forEach((c) => {
@@ -134,7 +142,7 @@
         b.setAttribute('aria-pressed', String(c === S.color));
         b.addEventListener('click', () => {
           S.color = c;
-          if (S.herr === 'goma' || S.herr === 'lapiz') elegirHerr('cubeta');
+          if (S.herr === 'goma') elegirHerr('cubeta');
           GM.$$('.color', pal).forEach((x) => x.setAttribute('aria-pressed', String(x === b)));
         });
         pal.appendChild(b);
@@ -151,8 +159,9 @@
       $('#co-zoom-ajustar').addEventListener('click', () => L.ajustar());
       elegirHerr('cubeta');
     },
-    abrir(d) {
+    abrir(d, herr) {
       if (S.d !== d) S.pila = [];
+      if (herr) elegirHerr(herr);
       S.d = d;
       L.ajustado = false;
       L.redimensionar();

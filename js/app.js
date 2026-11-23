@@ -70,7 +70,7 @@
         pintarGaleria(); pintarPasos();
       });
       b.addEventListener('click', () => { A.actual = d; ir('marcar'); });
-      g.insertBefore(b, g.querySelector('.nueva'));
+      g.insertBefore(b, g.querySelector('.tarjeta.nueva'));
     });
   }
 
@@ -161,6 +161,28 @@
     });
   }
 
+  /** Dibujo en blanco para dibujar dentro de la app. */
+  async function dibujoEnBlanco() {
+    const nombre = $('#mn-nombre').value.trim() || 'Dibujo ' + (A.dibujos.length + 1);
+    $('#modal-nombre').hidden = true;
+    const w = 800, h = 900;
+    const d = nuevoDibujo(nombre, w, h, GM.crearCanvas(w, h));
+    A.dibujos.push(d);
+    A.actual = d;
+    A.nombrePedido = null;
+    await GM.store.guardar(d);
+    pintarGaleria();
+    mostrar('colorear');
+    GM.colorear.abrir(d, 'lapiz');
+    try { history.replaceState(null, '', '#colorear'); } catch (e) { /* nada */ }
+    GM.aviso('Dibuja con el lápiz. Luego marca sus partes en «Marcar»', 3600);
+  }
+
+  function pedirNombreDibujo(nombre) {
+    $('#mn-nombre').value = nombre || '';
+    $('#modal-nombre').hidden = false;
+  }
+
   GM.app = {
     guardarLuego,
     dibujos: () => A.dibujos,
@@ -178,10 +200,14 @@
     await GM.cuento.init();
     GM.$$('.paso').forEach((b) => b.addEventListener('click', () => ir(b.dataset.ir)));
     $('#foto-nueva').addEventListener('change', (e) => { A.nombrePedido = A.nombrePedido || null; alElegirFoto(e.target.files[0]); });
-    GM.$('.tarjeta.nueva').addEventListener('click', () => { A.nombrePedido = null; });
+    GM.$('label.tarjeta.nueva').addEventListener('click', () => { A.nombrePedido = null; });
     const re = GM.debounce(reextraer, 120);
     ['#imp-umbral', '#imp-manchas'].forEach((s) => $(s).addEventListener('input', re));
     $('#imp-bordes').addEventListener('change', reextraer);
+    $('#dibujar-aqui').addEventListener('click', () => pedirNombreDibujo(''));
+    $('#mn-cancelar').addEventListener('click', () => { $('#modal-nombre').hidden = true; });
+    $('#mn-empezar').addEventListener('click', dibujoEnBlanco);
+    $('#mn-nombre').addEventListener('keydown', (e) => { if (e.key === 'Enter') dibujoEnBlanco(); });
     $('#imp-cancelar').addEventListener('click', () => { A.imp = null; ir('dibujos'); });
     $('#imp-guardar').addEventListener('click', guardarImportacion);
     new ResizeObserver(() => { if (A.pantalla === 'importar') pintarImportacion(); }).observe($('#cv-importar').parentElement);

@@ -6,7 +6,7 @@ Pensada para iPad. Funciona sin internet una vez cargada y sin IA: todo pasa en 
 
 ## Cómo se usa
 
-1. **Dibujos**: toca «Nuevo dibujo» y toma una foto. La app quita el papel; con las barras ajustas si faltan líneas o sobran manchas. Ponle nombre.
+1. **Dibujos**: toca «Dibujar aquí» para dibujar en la app (con el dedo o con Apple Pencil; si aprietas más, la línea sale más gruesa y la palma no raya), o «Nuevo dibujo» y toma una foto. La app quita el papel; con las barras ajustas si faltan líneas o sobran manchas. Ponle nombre.
 2. **Marcar**: toca «Nueva parte», elige qué es (cabeza, ala, pierna, espada...) y márcala:
    - 🖌️ **Pintar** encima con el dedo
    - 🪄 **Tocar línea** para marcar un trazo completo

@@ -89,6 +89,44 @@
     }
   }
 
+  /**
+   * Pedacitos de línea que quedaron sin marcar al borde de una parte (por pintar un poco corto)
+   * se quedaban quietos y se veían como rayas negras al moverse. Si un pedazo sin marcar es pequeño
+   * y toca una parte, pasa a ser de esa parte. Lo grande sin marcar sigue siendo el cuerpo base.
+   */
+  function absorberRestos(eff, px, w, h) {
+    const N = w * h, m = new Uint8Array(N);
+    let tinta = 0;
+    for (let p = 0; p < N; p++) {
+      if (px[p * 4 + 3] < 20) continue;
+      tinta++;
+      if (!eff[p]) m[p] = 1;
+    }
+    const c = GM.componentes(m, w, h);
+    if (!c.n) return;
+    const limite = Math.max(40, tinta * 0.04);
+    const votos = new Array(c.n);
+    for (let p = 0; p < N; p++) {
+      const k = c.ids[p];
+      if (k < 0 || c.areas[k] > limite) continue;
+      const x = p % w;
+      const vec = [x > 0 ? p - 1 : -1, x < w - 1 ? p + 1 : -1, p - w, p + w];
+      for (const q of vec) {
+        if (q < 0 || q >= N || !eff[q] || px[q * 4 + 3] < 20) continue;
+        const v = votos[k] || (votos[k] = new Map());
+        v.set(eff[q], (v.get(eff[q]) || 0) + 1);
+      }
+    }
+    const destino = new Int16Array(c.n);
+    votos.forEach((v, k) => {
+      if (!v) return;
+      let mejor = 0, mc = 0;
+      v.forEach((n, lab) => { if (n > mc) { mc = n; mejor = lab; } });
+      destino[k] = mejor;
+    });
+    for (let p = 0; p < N; p++) { const k = c.ids[p]; if (k >= 0 && destino[k]) eff[p] = destino[k]; }
+  }
+
   /** Construye (y guarda en caché) el esqueleto del dibujo. */
   GM.rig = function (d) {
     if (d._rig && d._rigVer === d.version) return d._rig;
@@ -101,7 +139,7 @@
     const px = img.data;
     const pared = GM.imagen.mascara(d.tinta, 60);
     const eff = d.etiquetas.slice();
-    if (d.partes.length) rellenarInteriores(eff, pared, w, h);
+    if (d.partes.length) { rellenarInteriores(eff, pared, w, h); absorberRestos(eff, px, w, h); }
 
     // Cajas y celdas por parte
     const ids = d.partes.map((p) => p.id);

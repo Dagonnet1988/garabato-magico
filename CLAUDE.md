@@ -23,7 +23,7 @@ App web para que una niña fotografíe sus dibujos en papel, marque sus partes c
 | `js/util.js` | Ayudas: `GM.$`, matrices 2D, componentes conexas, avisos |
 | `js/store.js` | Guardado en IndexedDB con respaldo en memoria |
 | `js/imagen.js` | Foto → quita el papel (estima el color del papel por bloques), limpia manchas, recorta |
-| `js/lienzo.js` | Lienzo táctil: un dedo dibuja, dos dedos hacen zoom y mueven |
+| `js/lienzo.js` | Lienzo táctil: un dedo dibuja, dos dedos hacen zoom y mueven. Con Apple Pencil: presión, y los dedos/palma no dibujan (salvo rellenar) |
 | `js/marcar.js` | Marcar partes: pintar, tocar línea (varita), encerrar (lazo), borrar marca, clavito (pivote) arrastrable, deshacer, modo prueba |
 | `js/rig.js` | Catálogo de partes (`GM.TIPOS`), movimientos (`GM.MOVS`), acciones (`GM.ACCIONES`); arma el esqueleto 2D (padres, pivotes) y anima |
 | `js/colorear.js` | Rellenar formas cerradas, crayón, lápiz (agrega líneas), borrador |
@@ -39,6 +39,7 @@ App web para que una niña fotografíe sus dibujos en papel, marque sus partes c
 - Al armar el esqueleto, el interior de una figura cerrada hereda la etiqueta de su contorno, para que el color pintado se mueva con la parte.
 - `reposo: {r, dx, dy}` en una parte es la postura que la niña acomodó con el dedo (modo «Acomodar»); se aplica antes de la animación y define dónde quedan los pies (`GM.cajaPose`).
 - Cada parte con color lleva un `relleno` (color de alrededor, sin cruzar líneas) que se dibuja con su padre para tapar el hueco cuando la parte se mueve.
+- Pedacitos de línea sin marcar que tocan una parte y son pequeños (menos del 4% de la tinta) pasan a esa parte al armar el esqueleto (`absorberRestos`), para que no queden rayas quietas al moverse.
 - El padre de una parte es la parte más grande con la que se toca; el pivote automático es el punto de la parte más cercano al centro de su padre. La niña puede mover el clavito.
 
 ## Reglas para trabajar aquí
