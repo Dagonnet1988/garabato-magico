@@ -21,7 +21,7 @@
   async function persistir(d) {
     d.modificado = Date.now();
     await GM.store.guardar(d);
-    GM.nube.cambio(d);
+    await GM.nube.cambio(d);
   }
 
   const guardando = new Map();
@@ -302,7 +302,7 @@
   }
 
   /* ---------- navegación ---------- */
-  const PANTALLAS = ['cuentos', 'dibujos', 'importar', 'marcar', 'colorear', 'cuento'];
+  const PANTALLAS = ['inicio', 'cuentos', 'dibujos', 'importar', 'marcar', 'colorear', 'cuento'];
   const MODULOS = { marcar: () => GM.marcar, colorear: () => GM.colorear, cuento: () => GM.cuento };
 
   function mostrar(p) {
@@ -333,7 +333,8 @@
       // Dibujos, Marcar, Colorear e Historia aparecen solo dentro de un cuento
       b.hidden = p !== 'cuentos' && (A.pantalla === 'cuentos' || !A.cuento);
     });
-    $('#en-cuento').hidden = A.pantalla === 'cuentos' || !A.cuento;
+    $('#pasos').hidden = A.pantalla === 'inicio';
+    $('#en-cuento').hidden = A.pantalla === 'cuentos' || A.pantalla === 'inicio' || !A.cuento;
     $('#en-cuento').textContent = A.cuento ? A.cuento.titulo : '';
   }
 
@@ -464,6 +465,57 @@
     GM.aviso('Se trajeron los cambios de la nube ☁️');
   }
 
+  /** De la pantalla de inicio a «Mis cuentos» (con el ejemplo si el equipo está vacío). */
+  async function salirDelInicio() {
+    if (A.pantalla !== 'inicio') return;
+    if (!A.dibujos.length && !(await GM.store.leerAjuste('muestraCreada'))) {
+      try {
+        const m = await crearMuestra();
+        A.dibujos.push(m);
+        await persistir(m);
+        await GM.store.guardarAjuste('muestraCreada', true);
+      } catch (e) { console.warn('No se pudo cargar el ejemplo', e); }
+    }
+    if (!vivos().length && A.dibujos.length) { await GM.store.guardarAjuste('cuentos', null); await migrarCuentos(); }
+    if (!A.cuento) abrirCuento(vivos()[0] || null);
+    ir('cuentos');
+    if (!A.perfil.nombre && !(await GM.store.leerAjuste('perfilPreguntado'))) abrirPerfil();
+  }
+
+  /**
+   * Cerrar sesión: sube lo que falte, quita de este equipo los dibujos y cuentos de la cuenta
+   * (siguen en la nube) y vuelve al inicio, donde se puede entrar otra vez o usar la app sin cuenta.
+   */
+  async function cerrarSesion() {
+    const b = $('#cn-salir');
+    b.disabled = true;
+    // lo que se estaba guardando, guardarlo ya
+    for (const [id, tm] of guardando) {
+      clearTimeout(tm); guardando.delete(id);
+      const d = A.dibujos.find((x) => x.id === id);
+      if (d) await persistir(d);
+    }
+    const ok = await GM.nube.subirTodo();
+    b.disabled = false;
+    if (!ok) { errorCuenta('No pude subir los últimos cambios a la nube. Revisa el internet y prueba otra vez, así no se pierde nada.'); return; }
+    await GM.nube.cerrarSesion();
+    for (const d of A.dibujos) await GM.store.borrar(d.id);
+    A.dibujos = []; A.cuentos = []; A.cuento = null; A.actual = null;
+    A.perfil = { nombre: '', modificado: 0 };
+    await GM.nube.limpiarPendientes();
+    await GM.store.guardarAjuste('cuentos', []);
+    await GM.store.guardarAjuste('perfil', A.perfil);
+    await GM.store.guardarAjuste('cuentoActual', null);
+    await GM.store.guardarAjuste('sinCuenta', false);
+    await GM.store.guardarAjuste('muestraCreada', false);
+    await GM.store.guardarAjuste('perfilPreguntado', false);
+    pintarPerfil();
+    $('#modal-cuenta').hidden = true;
+    mostrar('inicio');
+    try { history.replaceState(null, '', '#'); } catch (e) { /* nada */ }
+    GM.aviso('Sesión cerrada. Todo quedó guardado en la nube.', 3200);
+  }
+
   async function sincronizar() {
     if (A.sincronizando || !GM.nube.correo()) return;
     A.sincronizando = true;
@@ -560,6 +612,7 @@
         await GM.nube.entrar(c.email, c.clave);
         $('#modal-cuenta').hidden = true; $('#cn-clave').value = '';
         GM.aviso('¡Listo! Tus dibujos se guardan en la nube');
+        await salirDelInicio();
         sincronizar();
       } catch (e) { errorCuenta(traducir(e.message)); }
       $('#cn-entrar').disabled = false;
@@ -574,6 +627,7 @@
         if (lista) {
           $('#modal-cuenta').hidden = true; $('#cn-clave').value = '';
           GM.aviso('¡Cuenta creada! Tus dibujos se guardan en la nube');
+          await salirDelInicio();
           sincronizar();
         } else {
           $('#cn-error').hidden = true;
@@ -585,7 +639,12 @@
       $('#cn-crear').disabled = false;
     });
     $('#cn-sincronizar').addEventListener('click', async () => { $('#cn-sincronizar').disabled = true; await sincronizar(); $('#cn-sincronizar').disabled = false; pintarEstadoNube(); if (!A.errorNube) GM.aviso('Todo al día con la nube ☁️'); });
-    $('#cn-salir').addEventListener('click', async () => { await GM.nube.cerrarSesion(); $('#modal-cuenta').hidden = true; GM.aviso('Sesión cerrada. Los dibujos siguen en este equipo.'); });
+    $('#cn-salir').addEventListener('click', cerrarSesion);
+    $('#in-entrar').addEventListener('click', abrirCuenta);
+    $('#in-sin-cuenta').addEventListener('click', async () => {
+      await GM.store.guardarAjuste('sinCuenta', true);
+      await salirDelInicio();
+    });
 
     $('#dibujar-aqui').addEventListener('click', () => pedirNombreDibujo(''));
     $('#mn-cancelar').addEventListener('click', () => { $('#modal-nombre').hidden = true; });
@@ -617,6 +676,7 @@
     const c0 = vivos().find((c) => c.id === idActual);
     if (c0) abrirCuento(c0);
     const h = (location.hash || '').slice(1);
+    if (GM.nube.disponible() && !GM.nube.correo() && !(await GM.store.leerAjuste('sinCuenta'))) { mostrar('inicio'); return; }
     ir(A.cuento && ['dibujos', 'marcar', 'colorear', 'cuento'].includes(h) ? h : 'cuentos');
     if (!A.perfil.nombre && !(await GM.store.leerAjuste('perfilPreguntado'))) abrirPerfil();
 

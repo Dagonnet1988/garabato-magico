@@ -253,6 +253,17 @@
       if (sesion) vaciarLuego();
     },
 
+    /** Sube todo lo pendiente ahora. Devuelve true si no quedó nada sin subir. */
+    async subirTodo() {
+      if (!sesion) return false;
+      if (!navigator.onLine) return false;
+      await vaciarCola();
+      return Object.keys(await pendientes()).length === 0;
+    },
+
+    /** Olvida la cola de cambios (al quitar la copia de este equipo). */
+    async limpiarPendientes() { await guardarPendientes({}); },
+
     /** Avisar que cambió un ajuste (perfil o un cuento). */
     async ajusteCambio(clave) {
       if (!this.disponible()) return;

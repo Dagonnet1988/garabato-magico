@@ -187,3 +187,12 @@ h3{font-size:17px;color:var(--muted);font-weight:600}
 .escenas .chip.cambiar{border:2px solid var(--line);cursor:pointer;font-family:inherit;min-height:32px;padding:3px 10px;font-size:13px;color:var(--ink)}
 .escenas .chip.cambiar.manual{border-color:var(--crayon);color:var(--crayon)}
 .pista-escena{margin:6px 4px 0;text-align:center}
+
+/* Inicio */
+.pantalla.inicio{display:grid;place-items:center}
+.pantalla.inicio[hidden]{display:none}
+.inicio-caja{background:var(--surface);border-radius:28px;padding:32px 28px;max-width:520px;width:100%;display:flex;flex-direction:column;gap:14px;text-align:center;box-shadow:0 10px 28px rgba(20,24,40,.12)}
+.inicio-caja h1{margin:0;font-family:var(--display);font-size:30px}
+.inicio-caja p{margin:0;color:var(--muted)}
+.inicio-ic{font-size:56px}
+.inicio-caja .btn{font-size:19px;min-height:60px}

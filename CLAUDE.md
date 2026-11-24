@@ -44,6 +44,8 @@ App web para que una niña fotografíe sus dibujos en papel, marque sus partes c
 - Lo de otros equipos se baja **solo al abrir o recargar la app** (o con «Sincronizar ahora»); el dueño no quiere que la pantalla se refresque sola. Lo de este equipo se sube solo.
 - `escenaInfo` en un cuento: `{ [texto normalizado de la oración]: { accion?, pos?: { [idDibujo]: { x, y, e } } } }`. `accion` es el movimiento elegido a mano; `pos` es dónde quedan los pies (x, y de 0 a 1 de la escena) y `e` el tamaño. Un lugar puesto en una escena sigue en las siguientes hasta que se cambie.
 - Los pasos Dibujos, Marcar, Colorear e Historia solo se muestran dentro de un cuento.
+- Pantalla de inicio (con nube configurada y sin sesión, salvo que se eligió «Usar sin cuenta», ajuste `sinCuenta`): «Entrar con mi cuenta» o «Usar sin cuenta» (solo en este equipo, empieza de cero con el ejemplo).
+- Cerrar sesión: sube todo lo pendiente (si no puede, no cierra), quita de este equipo los dibujos, cuentos y perfil de la cuenta (siguen en la nube) y vuelve al inicio. Lo hecho sin cuenta se suma a la cuenta si luego se entra.
 
 ### Modelo de datos de un dibujo
 
