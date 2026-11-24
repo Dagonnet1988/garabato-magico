@@ -1,6 +1,7 @@
 /* Guardado local en el iPad (IndexedDB). Si el navegador no lo permite, todo sigue funcionando en memoria.
-   Hay dos espacios separados: el de la cuenta en la nube ('cuenta') y el de usar sin cuenta ('local').
-   Así lo que se hace sin cuenta no se mezcla con ninguna cuenta. */
+   Espacios separados: uno por cada cuenta de la nube ('cuenta' + id) y el de usar sin cuenta ('local').
+   Así nada se mezcla y nunca hace falta borrar lo de una cuenta para usar otra.
+   ('cuenta' sin id es la base única de versiones anteriores; se pasa a la de su cuenta al entrar.) */
 (function (GM) {
   'use strict';
   const BASES = { cuenta: 'garabato-magico', local: 'garabato-magico-sin-cuenta' };
@@ -64,10 +65,20 @@
     };
   }
 
+  function nombreDe(e, cuenta) {
+    if (e === 'local') return BASES.local;
+    return cuenta ? BASES.cuenta + '-' + cuenta : BASES.cuenta;
+  }
+  function volverA(nombre) {
+    if (nombre === DB) return;
+    DB = nombre; dbPromesa = null;
+    memoria = { dibujos: new Map(), ajustes: new Map() };
+  }
+
   GM.store = {
-    /** Cambia de espacio: 'cuenta' o 'local'. */
-    espacio(e) {
-      const nombre = BASES[e] || BASES.cuenta;
+    /** Cambia de espacio: 'cuenta' (con el id de la cuenta) o 'local'. */
+    espacio(e, cuenta) {
+      const nombre = nombreDe(e, cuenta);
       if (nombre === DB) return;
       DB = nombre; dbPromesa = null;
       memoria = { dibujos: new Map(), ajustes: new Map() };
@@ -85,23 +96,29 @@
       const db = await abrir();
       if (db) { await tx(db, 'dibujos', 'readwrite', (s) => s.clear()); await tx(db, 'ajustes', 'readwrite', (s) => s.clear()); }
     },
-    /** Copia todo lo de este espacio al otro (sin la cola de la nube) y lo borra de aquí. */
-    async moverA(e) {
+    /**
+     * Copia todo lo de este espacio a otro y lo borra de aquí, solo si se copió completo.
+     * Con conCola, también la cola de cambios por subir (cuando sigue siendo la misma cuenta).
+     */
+    async moverA(e, cuenta, conCola) {
       const db = await abrir();
-      if (!db) return;
-      const regs = (await tx(db, 'dibujos', 'readonly', (s) => s.getAll())) || [];
-      const claves = (await tx(db, 'ajustes', 'readonly', (s) => s.getAllKeys())) || [];
+      if (!db) return false;
+      const regs = await tx(db, 'dibujos', 'readonly', (s) => s.getAll());
+      const claves = await tx(db, 'ajustes', 'readonly', (s) => s.getAllKeys());
+      if (!regs || !claves) return false;
       const ajustes = [];
-      for (const k of claves) if (k !== 'nube-pendientes' && k !== 'duenio') ajustes.push([k, await this.leerAjuste(k)]);
+      for (const k of claves) if (conCola || (k !== 'nube-pendientes' && k !== 'duenio')) ajustes.push([k, await this.leerAjuste(k)]);
       const antes = DB;
-      this.espacio(e);
+      this.espacio(e, cuenta);
       const otra = await abrir();
+      let ok = !!otra;
       if (otra) {
-        for (const r of regs) await tx(otra, 'dibujos', 'readwrite', (s) => s.put(r));
-        for (const [k, v] of ajustes) await tx(otra, 'ajustes', 'readwrite', (s) => s.put(v, k));
+        for (const r of regs) if (!(await tx(otra, 'dibujos', 'readwrite', (s) => s.put(r)))) ok = false;
+        for (const [k, v] of ajustes) if (!(await tx(otra, 'ajustes', 'readwrite', (s) => s.put(v, k)))) ok = false;
       }
-      DB = null; this.espacio(Object.keys(BASES).find((x) => BASES[x] === antes));
-      await this.vaciar();
+      volverA(antes);
+      if (ok) await this.vaciar(); // si algo no se copió, lo de aquí se queda como estaba
+      return ok;
     },
     async listar() {
       const db = await abrir();

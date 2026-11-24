@@ -366,12 +366,14 @@
     sincronizando: ['🔄', 'Guardando…'],
     listo: ['✅', 'En la nube'],
     error: ['⚠️', 'Sin conexión'],
+    vencida: ['🔑', 'Entrar otra vez'],
   };
 
   function pintarCuenta(e, detalle) {
     const b = $('#btn-cuenta');
     if (!GM.nube.disponible()) { b.hidden = true; return; }
     if (e === 'error') A.errorNube = detalle || 'No se pudo conectar';
+    else if (e === 'vencida') A.errorNube = 'La sesión se cerró. Entra otra vez con tu correo y contraseña: lo que hiciste en este equipo sigue aquí y se sube al entrar.';
     else if (e === 'listo') A.errorNube = '';
     const [ic, t] = TEXTO_ESTADO[e] || TEXTO_ESTADO['sin-sesion'];
     b.hidden = false;
@@ -389,9 +391,15 @@
   }
 
   function abrirCuenta() {
-    const con = !!GM.nube.correo();
+    const con = !!GM.nube.correo() && !GM.nube.vencida();
     $('#cu-sin').hidden = con; $('#cu-con').hidden = !con;
     $('#cn-ok').hidden = true; $('#cn-error').hidden = true;
+    A.salirIgual = false;
+    if (GM.nube.vencida()) {
+      // volver a entrar con la misma cuenta: lo de este equipo se sube después
+      $('#cn-correo').value = GM.nube.correo();
+      errorCuenta('La sesión se cerró. Escribe la contraseña para entrar otra vez: tus dibujos siguen aquí y se suben al entrar.');
+    }
     $('#cn-correo-actual').textContent = GM.nube.correo();
     pintarEstadoNube();
     $('#modal-cuenta').hidden = false;
@@ -475,12 +483,22 @@
     if (!(await GM.store.leerAjuste('duenio')) && (await GM.store.tieneAlgo())) await GM.store.moverA('local');
   }
 
-  /** Usar el espacio de la cuenta: solo con lo de esa cuenta. */
+  /**
+   * Usar el espacio de la cuenta: cada cuenta tiene el suyo en este equipo, así nunca se borra
+   * lo de una cuenta para entrar con otra. Lo que estaba en la base única de antes pasa a su cuenta.
+   */
   async function usarEspacioCuenta(alAbrir) {
+    const yo = GM.nube.usuario();
     GM.store.espacio('cuenta');
-    const yo = GM.nube.usuario(), duenio = await GM.store.leerAjuste('duenio');
-    if (duenio && duenio !== yo) await GM.store.vaciar();
-    else if (!duenio && !alAbrir && (await GM.store.tieneAlgo())) await GM.store.moverA('local');
+    const duenio = await GM.store.leerAjuste('duenio');
+    if (!duenio && !alAbrir && (await GM.store.tieneAlgo())) await GM.store.moverA('local');
+    else if ((duenio === yo || (!duenio && alAbrir)) && (await GM.store.tieneAlgo() || await GM.store.leerAjuste('nube-pendientes'))) {
+      GM.store.espacio('cuenta', yo);
+      const yaHay = await GM.store.tieneAlgo();
+      GM.store.espacio('cuenta');
+      if (!yaHay) await GM.store.moverA('cuenta', yo, true);
+    }
+    GM.store.espacio('cuenta', yo);
     await GM.store.guardarAjuste('duenio', yo);
   }
 
@@ -533,11 +551,16 @@
     }
     const ok = await GM.nube.subirTodo();
     b.disabled = false;
-    if (!ok) { errorCuenta('No pude subir los últimos cambios a la nube. Revisa el internet y prueba otra vez, así no se pierde nada.'); return; }
+    if (!ok && !A.salirIgual) {
+      A.salirIgual = true;
+      errorCuenta('Todavía hay cambios que no llegaron a la nube (revisa el internet). Si cierras la sesión igual, se quedan guardados en este equipo y se suben la próxima vez que entres con esta cuenta. Toca «Cerrar sesión» otra vez para salir igual.');
+      return;
+    }
+    A.salirIgual = false;
     await GM.nube.cerrarSesion();
-    // la copia de la cuenta sale de este equipo (sigue en la nube)
-    GM.store.espacio('cuenta');
-    await GM.store.vaciar();
+    // La copia de la cuenta sale de este equipo solo si TODO ya está en la nube.
+    // Si quedó algo sin subir, se queda guardado aparte (en el espacio de esa cuenta) hasta volver a entrar.
+    if (ok) await GM.store.vaciar();
     elegirSinCuenta(false);
     A.dibujos = []; A.cuentos = []; A.cuento = null; A.actual = null;
     A.perfil = { nombre: '', modificado: 0 };
@@ -545,11 +568,11 @@
     $('#modal-cuenta').hidden = true;
     mostrar('inicio');
     try { history.replaceState(null, '', '#'); } catch (e) { /* nada */ }
-    GM.aviso('Sesión cerrada. Todo quedó guardado en la nube.', 3200);
+    GM.aviso(ok ? 'Sesión cerrada. Todo quedó guardado en la nube.' : 'Sesión cerrada. Lo que faltaba subir quedó guardado en este equipo y se sube cuando vuelvas a entrar.', 3600);
   }
 
   async function sincronizar() {
-    if (A.sincronizando || !GM.nube.correo()) return;
+    if (A.sincronizando || !GM.nube.correo() || GM.nube.vencida()) return;
     A.sincronizando = true;
     try {
       const r = await GM.nube.sincronizar();
@@ -702,7 +725,8 @@
 
     // Lo de otros equipos se trae solo al abrir la app (o recargar), o con «Sincronizar ahora».
     // Lo que cambia aquí se sube solo, sin tocar la pantalla.
-    if (GM.nube.correo()) sincronizar();
+    if (GM.nube.vencida()) GM.aviso('🔑 Entra otra vez a tu cuenta para que los dibujos se suban a la nube', 4500);
+    else if (GM.nube.correo()) sincronizar();
   }
 
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', iniciar);

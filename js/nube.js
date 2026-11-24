@@ -50,13 +50,28 @@
     return res;
   }
 
+  const errorVencida = () => { const e = new Error('Hay que entrar otra vez a la cuenta'); e.vencida = true; return e; };
+
   async function asegurarToken() {
     if (!sesion) throw new Error('sin sesión');
+    if (sesion.vencida) throw errorVencida();
     if (sesion.expires_at - Date.now() > 60000) return;
-    const r = await pedir('/auth/v1/token?grant_type=refresh_token', {
-      method: 'POST', auth: false, headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ refresh_token: sesion.refresh_token }),
-    });
+    let r;
+    try {
+      r = await pedir('/auth/v1/token?grant_type=refresh_token', {
+        method: 'POST', auth: false, headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ refresh_token: sesion.refresh_token }),
+      });
+    } catch (e) {
+      // La nube ya no acepta esta sesión (se cerró en otro lado o venció): los dibujos siguen aquí
+      // y en la cola; se suben cuando se vuelva a entrar con la misma cuenta.
+      if (e.status >= 400 && e.status < 500) {
+        sesion.vencida = true; guardarSesion(sesion);
+        avisarEstado('vencida');
+        throw errorVencida();
+      }
+      throw e;
+    }
     guardarSesion(desdeRespuestaAuth(await r.json()));
   }
 
@@ -155,6 +170,7 @@
 
   async function vaciarCola() {
     if (!sesion || !navigator.onLine) return;
+    if (sesion.vencida) { avisarEstado('vencida'); return; }
     const p = await pendientes();
     const ids = Object.keys(p);
     if (!ids.length) { avisarEstado('listo'); return; }
@@ -171,7 +187,7 @@
         await guardarPendientes(p);
       } catch (e) {
         console.warn('No se pudo subir', id, e);
-        avisarEstado('error', e.message);
+        if (!e.vencida) avisarEstado('error', e.message);
         return;
       }
     }
@@ -185,6 +201,10 @@
     disponible: () => !!(URL_BASE && ANON),
     estado: () => estado,
     correo: () => (sesion && sesion.user && sesion.user.email) || '',
+    /** La sesión ya no vale (se cerró en otro lado): hay que entrar otra vez para subir. */
+    vencida: () => !!(sesion && sesion.vencida),
+    /** ¿Quedan cambios de este equipo sin subir? */
+    async hayPendientes() { return Object.keys(await pendientes()).length > 0; },
     alCambiar(f) { oyentes.add(f); f(estado); },
 
     async iniciar() {
@@ -202,7 +222,7 @@
         } catch (e) { console.warn('Enlace de inicio no válido', e); }
         try { history.replaceState(null, '', location.pathname); } catch (e) { /* nada */ }
       }
-      avisarEstado(sesion ? 'listo' : 'sin-sesion');
+      avisarEstado(sesion ? (sesion.vencida ? 'vencida' : 'listo') : 'sin-sesion');
       window.addEventListener('online', () => { if (sesion) this.sincronizar(); });
     },
 
@@ -231,7 +251,9 @@
     },
 
     async cerrarSesion() {
-      try { if (sesion) await pedir('/auth/v1/logout', { method: 'POST' }); } catch (e) { /* nada */ }
+      // scope=local: cerrar solo aquí. Sin esto Supabase cierra la sesión en TODOS los equipos
+      // y lo que se dibuja en los otros deja de subirse.
+      try { if (sesion && !sesion.vencida) await pedir('/auth/v1/logout?scope=local', { method: 'POST' }); } catch (e) { /* nada */ }
       guardarSesion(null);
       avisarEstado('sin-sesion');
     },
@@ -257,7 +279,7 @@
 
     /** Sube todo lo pendiente ahora. Devuelve true si no quedó nada sin subir. */
     async subirTodo() {
-      if (!sesion) return false;
+      if (!sesion || sesion.vencida) return false;
       if (!navigator.onLine) return false;
       await vaciarCola();
       return Object.keys(await pendientes()).length === 0;
@@ -286,7 +308,7 @@
         const r = await api('/rest/v1/dibujos?select=id,nombre,w,h,partes,color_usado,muestra,creado,modificado,borrado');
         const filas = await r.json();
         const locales = new Map(GM.app.dibujos().map((d) => [d.id, d]));
-        const out = { nuevos: [], borrados: [], ajustes: [] };
+        const out = { nuevos: [], borrados: [], ajustes: [], fallidos: [] };
         const hayMuestraRemota = filas.some((f) => f.muestra && !f.borrado);
         // el ejemplo de este equipo sobra solo si nadie lo cambió (si lo pintó, se queda)
         const sinTocar = (d) => d.muestra && !d.colorUsado && (d.modificado || 0) - (d.creado || 0) < 60000;
@@ -294,7 +316,12 @@
           const l = locales.get(f.id);
           if (f.borrado) { if (l) out.borrados.push(f.id); continue; }
           if (!l || (f.modificado || 0) > (l.modificado || 0)) {
-            out.nuevos.push(await bajarDibujo(f));
+            let n = null;
+            try { n = await bajarDibujo(f); } catch (e) {
+              if (e.vencida) throw e;
+              console.warn('No se pudo bajar el dibujo', f.nombre, e); out.fallidos.push(f.nombre); continue;
+            }
+            out.nuevos.push(n);
             const p = await pendientes(); if (p[f.id] === 'subir') { delete p[f.id]; await guardarPendientes(p); }
           }
           else if ((l.modificado || 0) > (f.modificado || 0)) await GM.nube.cambio(l);
@@ -313,11 +340,12 @@
         const ra = await api('/rest/v1/ajustes?select=clave,valor,modificado');
         out.ajustes = await ra.json();
         await vaciarCola();
-        avisarEstado('listo');
+        if (out.fallidos.length) avisarEstado('error', 'No se pudo traer: ' + out.fallidos.join(', ') + '. Se intenta otra vez al abrir la app.');
+        else if (estado !== 'error' && estado !== 'vencida') avisarEstado('listo');
         return out;
       } catch (e) {
         console.warn('Sincronización fallida', e);
-        avisarEstado('error', e.message);
+        if (!e.vencida) avisarEstado('error', e.message);
         return null;
       }
     },
