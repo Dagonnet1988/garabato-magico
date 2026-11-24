@@ -376,8 +376,6 @@
       const dir = p.cx >= p.pivote.x ? 1 : -1;
       return [(-0.55 + 1.0 * sierra(t * 1.3)) * dir, 1, 1, 0, 0];
     }
-    // con la espada en la mano no aletea: solo se mece un poquito (al caminar, volar, etc.)
-    if (p.sostiene) return [Math.sin(t * 2 + f) * (acc === 'quieto' || acc === 'dormir' ? 0.03 : 0.07), 1, 1, 0, 0];
     switch (p.mov) {
       case 'aletear': {
         const vel = acc === 'volar' ? 16 : mueve ? 9 : acc === 'feliz' ? 10 : 4;
@@ -423,7 +421,7 @@
       }
       case 'blandir': {
         if (acc === 'espada') r = p.padre !== null && rig.porId.get(p.padre).sostiene ? -0.25 + 0.45 * sierra(t * 1.3) : -0.9 + 1.5 * sierra(t * 1.3);
-        else r = Math.sin(t * 2 + f) * (mueve ? 0.25 : 0.08);
+        else if (!(p.padre !== null && rig.porId.get(p.padre).sostiene)) r = Math.sin(t * 2 + f) * (mueve ? 0.25 : 0.08); // en la mano, quieta
         break;
       }
       case 'temblar': r = Math.sin(t * 22 + f) * 0.07; break;
@@ -468,11 +466,24 @@
     return r && (r.r || r.dx || r.dy) ? GM.mat.alrededor(p.pivote.x, p.pivote.y, r.r || 0, 1, 1, r.dx || 0, r.dy || 0) : null;
   }
 
+  /**
+   * ¿Con qué parte se mueve? La espada va con su ala solo al dar el golpe;
+   * en las demás acciones (volar, caminar...) el ala aletea sola y la espada se queda con el cuerpo.
+   */
+  function padreEn(rig, p, acc) {
+    if (p.padre === null) return null;
+    const q = rig.porId.get(p.padre);
+    if (q && q.sostiene && p.mov === 'blandir' && acc !== 'espada') return q.padre;
+    return p.padre;
+  }
+  GM.padreEn = padreEn;
+
   /** Matriz de cada parte (en coordenadas del dibujo, multiplicadas por B). */
   GM.matricesRig = function (rig, t, acc, B) {
     const mats = new Map();
     for (const p of rig.partes) {
-      const pm = p.padre !== null && mats.has(p.padre) ? mats.get(p.padre) : B;
+      const pa = padreEn(rig, p, acc);
+      const pm = pa !== null && mats.has(pa) ? mats.get(pa) : B;
       const [r, sx, sy, dx, dy] = pose(p, t, acc, rig);
       let local;
       if (p.mov === 'parpadear' || p.mov === 'respirar') {
@@ -519,7 +530,8 @@
     if (rig.base) { set(B); ctx.drawImage(rig.base.canvas, rig.base.x, rig.base.y); }
     for (const p of rig.partes) {
       if (p.relleno) {
-        set(p.padre !== null && mats.has(p.padre) ? mats.get(p.padre) : B);
+        const pa = padreEn(rig, p, acc);
+        set(pa !== null && mats.has(pa) ? mats.get(pa) : B);
         ctx.drawImage(p.relleno.canvas, p.relleno.x, p.relleno.y);
       }
       set(mats.get(p.id));
