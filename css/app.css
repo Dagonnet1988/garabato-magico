@@ -35,7 +35,8 @@ h3{font-size:17px;color:var(--muted);font-weight:600}
 
 /* Barra superior */
 .barra{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap}
-.marca{font-family:var(--display);font-weight:700;font-size:26px;letter-spacing:.01em}
+.marca{font-family:var(--display);font-weight:700;font-size:26px;letter-spacing:.01em;background:none;border:0;padding:6px 4px;cursor:pointer;color:inherit;text-align:left;min-height:48px}
+.marca-de{color:var(--ink);font-weight:600}
 .marca-g{color:var(--crayon)}
 .marca-m{color:var(--sky)}
 .pasos{display:flex;gap:6px;background:var(--surface);padding:5px;border-radius:999px;box-shadow:0 1px 0 var(--line)}
@@ -169,3 +170,12 @@ h3{font-size:17px;color:var(--muted);font-weight:600}
 #cu-sin,#cu-con,#cn-paso2{display:flex;flex-direction:column;gap:12px}
 @media (max-width:700px){.cuenta .t{display:none}}
 .ayuda.ok{color:var(--leaf);font-weight:700}
+
+/* Cuentos */
+.tarjeta .miniatura.vacia{font-size:64px;min-height:170px}
+.modal-caja.ancha{width:min(760px,calc(100vw - 32px))}
+.galeria.chica{grid-template-columns:repeat(auto-fill,minmax(150px,1fr));max-height:56vh;overflow:auto;padding:4px}
+.galeria.chica .miniatura img{max-height:120px}
+.ayuda.error{color:#b3261e}
+@media (max-width:1000px){.marca-de{display:block;font-size:17px}.paso{padding:9px 12px}}
+@media (max-width:900px){.paso span:last-child{display:none}}

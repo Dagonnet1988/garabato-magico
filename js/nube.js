@@ -138,6 +138,17 @@
     } catch (e) { /* si no se pudo borrar el archivo, igual queda marcado como borrado */ }
   }
 
+  /** Ajustes de la cuenta: el perfil y cada cuento (clave "cuento:<id>"). */
+  async function subirAjuste(clave) {
+    const valor = GM.app.valorAjuste(clave);
+    if (!valor) return;
+    await api('/rest/v1/ajustes', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Prefer: 'resolution=merge-duplicates,return=minimal' },
+      body: JSON.stringify([{ clave, valor, modificado: valor.modificado || Date.now() }]),
+    });
+  }
+
   /* ---------- cola de cambios pendientes (sobrevive sin internet) ---------- */
   async function pendientes() { return (await GM.store.leerAjuste('nube-pendientes')) || {}; }
   async function guardarPendientes(p) { await GM.store.guardarAjuste('nube-pendientes', p); }
@@ -151,6 +162,7 @@
     for (const id of ids) {
       try {
         if (p[id] === 'borrar') await marcarBorrado(id);
+        else if (p[id] === 'ajuste') await subirAjuste(id.slice(3));
         else {
           const d = GM.app.dibujos().find((x) => x.id === id);
           if (d) await subirDibujo(d);
@@ -163,11 +175,10 @@
         return;
       }
     }
-    if (p.__cuento) { /* nada: el cuento va aparte */ }
     avisarEstado('listo');
   }
 
-  const vaciarLuego = GM.debounce(vaciarCola, 1500);
+  const vaciarLuego = GM.debounce(vaciarCola, 800);
 
   /* ---------- API pública ---------- */
   GM.nube = {
@@ -242,19 +253,17 @@
       if (sesion) vaciarLuego();
     },
 
-    async guardarCuento(valor) {
-      if (!sesion || !navigator.onLine) return;
-      try {
-        await api('/rest/v1/ajustes', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json', Prefer: 'resolution=merge-duplicates,return=minimal' },
-          body: JSON.stringify([{ clave: 'cuento', valor, modificado: valor.modificado || Date.now() }]),
-        });
-      } catch (e) { console.warn('No se pudo guardar el cuento en la nube', e); }
+    /** Avisar que cambió un ajuste (perfil o un cuento). */
+    async ajusteCambio(clave) {
+      if (!this.disponible()) return;
+      const p = await pendientes();
+      p['aj:' + clave] = 'ajuste';
+      await guardarPendientes(p);
+      if (sesion) vaciarLuego();
     },
 
     /**
-     * Compara la nube con este equipo. Devuelve { nuevos: [dibujos bajados], borrados: [ids], cuento }.
+     * Compara la nube con este equipo. Devuelve { nuevos: [dibujos bajados], borrados: [ids], ajustes: [filas] }.
      * La app decide cómo mostrarlos.
      */
     async sincronizar() {
@@ -264,8 +273,10 @@
         const r = await api('/rest/v1/dibujos?select=id,nombre,w,h,partes,color_usado,muestra,creado,modificado,borrado');
         const filas = await r.json();
         const locales = new Map(GM.app.dibujos().map((d) => [d.id, d]));
-        const out = { nuevos: [], borrados: [], cuento: null };
+        const out = { nuevos: [], borrados: [], ajustes: [] };
         const hayMuestraRemota = filas.some((f) => f.muestra && !f.borrado);
+        // el ejemplo de este equipo sobra solo si nadie lo cambió (si lo pintó, se queda)
+        const sinTocar = (d) => d.muestra && !d.colorUsado && (d.modificado || 0) - (d.creado || 0) < 60000;
         for (const f of filas) {
           const l = locales.get(f.id);
           if (f.borrado) { if (l) out.borrados.push(f.id); continue; }
@@ -280,15 +291,14 @@
         if (hayMuestraRemota) {
           const p = await pendientes();
           locales.forEach((d) => {
-            if (d.muestra && !remotos.has(d.id)) { out.borrados.push(d.id); if (p[d.id] === 'subir') delete p[d.id]; }
+            if (sinTocar(d) && !remotos.has(d.id)) { out.borrados.push(d.id); if (p[d.id] === 'subir') delete p[d.id]; }
           });
           await guardarPendientes(p);
         }
         // Dibujos de este equipo que la nube no tiene: subirlos
-        for (const d of locales.values()) if (!remotos.has(d.id) && !(hayMuestraRemota && d.muestra)) await GM.nube.cambio(d);
-        const ra = await api('/rest/v1/ajustes?select=valor,modificado&clave=eq.cuento');
-        const aj = await ra.json();
-        if (aj[0] && aj[0].valor) out.cuento = Object.assign({}, aj[0].valor, { modificado: aj[0].modificado });
+        for (const d of locales.values()) if (!remotos.has(d.id) && !(hayMuestraRemota && sinTocar(d))) await GM.nube.cambio(d);
+        const ra = await api('/rest/v1/ajustes?select=clave,valor,modificado');
+        out.ajustes = await ra.json();
         await vaciarCola();
         avisarEstado('listo');
         return out;

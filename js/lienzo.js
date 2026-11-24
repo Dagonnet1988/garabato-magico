@@ -1,4 +1,6 @@
-/* Lienzo con zoom: un dedo dibuja, dos dedos acercan y mueven (como en el iPad). */
+/* Lienzo con zoom: un dedo dibuja, dos dedos acercan y mueven (como en el iPad).
+   Con `mantenerParaMover`, dejar el dedo (o el clic) quieto un momento y arrastrar mueve la hoja.
+   Con el mouse, el botón derecho o la rueda apretada también mueven la hoja. */
 (function (GM) {
   'use strict';
 
@@ -19,6 +21,7 @@
       canvas.addEventListener('pointermove', (e) => this.mover(e));
       canvas.addEventListener('pointerup', (e) => this.arriba(e));
       canvas.addEventListener('pointercancel', (e) => this.arriba(e, true));
+      canvas.addEventListener('contextmenu', (e) => e.preventDefault());
       canvas.addEventListener('wheel', (e) => {
         e.preventDefault();
         const r = this.cv.getBoundingClientRect();
@@ -107,6 +110,7 @@
         }
         return;
       }
+      if (this.punteros.size === 2) { this.soltarEspera(); this.arrastre = null; }
       if (!this.usaLapiz && this.punteros.size === 2) {
         if (this.trazando) { this.trazando = false; this.o.alTocar && this.o.alTocar.cancelar && this.o.alTocar.cancelar(); }
         const [a, b] = Array.from(this.punteros.values());
@@ -114,17 +118,46 @@
         return;
       }
       if (this.gesto || (!this.usaLapiz && this.punteros.size > 1)) return;
+      if (e.pointerType === 'mouse' && (e.button === 1 || e.button === 2)) { this.empezarArrastre(e); return; }
       if (this.o.alTocar && this.o.alTocar.inicio) {
         this.trazoId = e.pointerId;
-        this.trazando = this.o.alTocar.inicio(this.aDibujo(e.clientX, e.clientY), e) !== false;
+        const r = this.o.alTocar.inicio(this.aDibujo(e.clientX, e.clientY), e);
+        if (r === 'mover') { this.trazando = false; this.empezarArrastre(e); return; }
+        this.trazando = r !== false;
+        if (this.o.mantenerParaMover && e.pointerType !== 'pen' && r !== 'fijo') {
+          const id = e.pointerId;
+          this.espera = { id, x: e.clientX, y: e.clientY, t: setTimeout(() => {
+            if (!this.espera || this.espera.id !== id || !this.punteros.has(id)) return;
+            // quieto un momento: se deshace lo que alcanzó a pintar y ahora mueve la hoja
+            if (this.trazando && this.o.alTocar.cancelar) this.o.alTocar.cancelar();
+            this.trazando = false;
+            const v = this.punteros.get(id);
+            this.espera = null;
+            this.empezarArrastre({ pointerId: id, clientX: v.x, clientY: v.y });
+          }, 450) };
+        }
       }
     }
+
+    empezarArrastre(e) {
+      this.arrastre = { id: e.pointerId, x: e.clientX, y: e.clientY };
+      this.cv.style.cursor = 'grabbing';
+    }
+
+    soltarEspera() { if (this.espera) { clearTimeout(this.espera.t); this.espera = null; } }
 
     mover(e) {
       if (!this.punteros.has(e.pointerId)) return;
       const tipo = this.punteros.get(e.pointerId).tipo;
       if (tipo === 'pen') this.ultLapiz = performance.now();
       this.punteros.set(e.pointerId, { x: e.clientX, y: e.clientY, tipo });
+      if (this.espera && this.espera.id === e.pointerId && Math.hypot(e.clientX - this.espera.x, e.clientY - this.espera.y) > 8) this.soltarEspera();
+      if (this.arrastre && this.arrastre.id === e.pointerId) {
+        this.vista.x += e.clientX - this.arrastre.x; this.vista.y += e.clientY - this.arrastre.y;
+        this.arrastre.x = e.clientX; this.arrastre.y = e.clientY;
+        this.pedir();
+        return;
+      }
       if (this.gesto) {
         const ds = this.usaLapiz ? this.dedos() : Array.from(this.punteros.values());
         if (ds.length < 2) return;
@@ -146,6 +179,8 @@
     arriba(e, cancelado) {
       if (!this.punteros.has(e.pointerId)) return;
       this.punteros.delete(e.pointerId);
+      if (this.espera && this.espera.id === e.pointerId) this.soltarEspera();
+      if (this.arrastre && this.arrastre.id === e.pointerId) { this.arrastre = null; this.cv.style.cursor = ''; return; }
       if (this.gesto) {
         const quedan = this.usaLapiz ? this.dedos().length : this.punteros.size;
         if (quedan < 2) this.gesto = null;

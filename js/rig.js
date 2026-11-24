@@ -54,6 +54,10 @@
     { id: 'dormir', nombre: 'Dormir', emoji: '😴' },
   ];
 
+  // Cosas que se agarran con la mano, y las partes que pueden agarrarlas
+  const SOSTENIDOS = new Set(['espada']);
+  const MANOS = new Set(['mano', 'brazo', 'ala']);
+
   GM.COLORES_PARTE = ['#e6194b', '#3cb44b', '#4363d8', '#f58231', '#911eb4', '#0fb5ba', '#f032e6', '#9a6324', '#2f4858', '#bcbd22', '#ff7fa7', '#1a9e77', '#7a5af8', '#d4a017'];
 
   /** Rellena el interior de figuras cerradas con la etiqueta de su contorno (para que el color pintado se mueva con la parte). */
@@ -201,29 +205,62 @@
         cx: it.sx / it.n, cy: it.sy / it.n, canvas: recorte(pd.id, it), x: it.x0, y: it.y0 });
     });
 
-    // Padre: la parte más grande con la que se toca
+    // Padre: la parte a la que la niña la unió; si no, la más grande con la que se toca.
+    // Lo que se agarra con la mano (espada) prefiere un ala, brazo o mano aunque toque algo más grande.
+    const porIdDatos = new Map(partes.map((p) => [p.id, p]));
     for (const p of partes) {
       p.padre = null;
+      const u = p.datos.unida;
+      if (u === 'nada') continue;
+      if (u && u !== p.id && porIdDatos.has(u)) { p.padre = u; continue; }
       if (p.tipo === 'cuerpo') continue;
+      const agarra = SOSTENIDOS.has(p.tipo);
+      if (agarra) {
+        // la espada va con el ala, brazo o mano más cercana (aunque no se toquen)
+        const mano = masCercana(p, partes.filter((q) => q !== p && MANOS.has(q.tipo)));
+        if (mano) { p.padre = mano.id; continue; }
+      }
       let mejor = null, mejorPuntos = 0;
       for (const q of partes) {
-        if (q === p || q.area <= p.area) continue;
+        if (q === p || (q.area <= p.area && !(agarra && MANOS.has(q.tipo)))) continue;
         const dq = dilatada(q.id);
         let puntos = 0;
         const c = p.it.celdas;
         for (let k = 0; k < c.length; k++) if (c[k] && dq[k]) puntos++;
         if (p.cx >= q.it.x0 && p.cx <= q.it.x1 && p.cy >= q.it.y0 && p.cy <= q.it.y1) puntos += 3;
+        if (agarra && puntos > 0 && MANOS.has(q.tipo)) puntos += 100000;
         if (puntos > mejorPuntos || (puntos === mejorPuntos && puntos > 0 && mejor && q.area < mejor.area)) { mejor = q; mejorPuntos = puntos; }
       }
       if (mejor && mejorPuntos > 0) p.padre = mejor.id;
     }
+    function masCercana(p, candidatas) {
+      const mias = [];
+      p.it.celdas.forEach((v, k) => { if (v) mias.push(k); });
+      let mejor = null, md = Infinity;
+      for (const q of candidatas) {
+        const c = q.it.celdas;
+        for (let k = 0; k < c.length; k++) {
+          if (!c[k]) continue;
+          const qx = k % gw, qy = (k / gw) | 0;
+          for (const m of mias) {
+            const dx = (m % gw) - qx, dy = ((m / gw) | 0) - qy, dd = dx * dx + dy * dy;
+            if (dd < md) { md = dd; mejor = q; }
+          }
+        }
+      }
+      const lim = Math.max(gw, gh) * 0.15;
+      return md <= lim * lim ? mejor : null;
+    }
+
     // Evitar ciclos (por si acaso)
     const porId = new Map(partes.map((p) => [p.id, p]));
     for (const p of partes) {
       let q = p, pasos = 0;
-      while (q && q.padre !== null && pasos < 50) { q = porId.get(q.padre); pasos++; }
-      if (pasos >= 50) p.padre = null;
+      while (q && q.padre !== null && pasos < 300) { q = porId.get(q.padre); pasos++; if (q === p) break; }
+      if (q === p || pasos >= 300) p.padre = null;
     }
+    // Quién sostiene la espada (para moverla con su ala o brazo)
+    for (const p of partes) if (p.mov === 'blandir' && p.padre !== null && porId.get(p.padre).mov !== 'blandir') porId.get(p.padre).sostiene = true;
 
     // Clavito (pivote): el punto de la parte más cercano al centro de su padre (o del dibujo)
     const centro = { x: todo.n ? todo.sx / todo.n : w / 2, y: todo.n ? todo.sy / todo.n : h / 2 };
@@ -269,7 +306,7 @@
 
     const base = info.get(0);
     const rig = {
-      w, h, partes: orden, porId, centro,
+      w, h, partes: orden, porId, centro, eff,
       base: base.n ? { canvas: recorte(0, base), x: base.x0, y: base.y0 } : null,
       caja: { x0: todo.x0, y0: todo.y0, x1: todo.x1, y1: todo.y1 },
       pie: { x: (todo.x0 + todo.x1) / 2, y: todo.y1 },
@@ -334,6 +371,11 @@
     if (acc === 'pose') return [r, sx, sy, dx, dy];
     const f = p.fase || 0, lado = p.lado || 1;
     const mueve = acc === 'caminar' || acc === 'correr' || acc === 'saltar' || acc === 'bailar';
+    if (acc === 'espada' && p.sostiene) {
+      // el ala o brazo que tiene la espada da el golpe; la espada va pegada
+      const dir = p.cx >= p.pivote.x ? 1 : -1;
+      return [(-0.55 + 1.0 * sierra(t * 1.3)) * dir, 1, 1, 0, 0];
+    }
     switch (p.mov) {
       case 'aletear': {
         const vel = acc === 'volar' ? 16 : mueve ? 9 : acc === 'feliz' ? 10 : 4;
@@ -343,7 +385,7 @@
       }
       case 'paso': {
         const vel = acc === 'correr' ? 13 : acc === 'caminar' ? 6.5 : acc === 'saltar' ? 7 : acc === 'bailar' ? 6 : 2;
-        const amp = acc === 'correr' ? 0.5 : acc === 'caminar' ? 0.32 : acc === 'saltar' ? 0.35 : acc === 'bailar' ? 0.3 : acc === 'volar' ? 0.18 : 0.04;
+        const amp = acc === 'correr' ? 0.5 : acc === 'caminar' ? 0.32 : acc === 'saltar' ? 0.35 : acc === 'bailar' ? 0.3 : acc === 'volar' ? 0.18 : acc === 'espada' ? 0 : 0.04;
         r = Math.sin(t * vel + (lado > 0 ? 0 : Math.PI)) * amp;
         break;
       }
@@ -378,7 +420,7 @@
         break;
       }
       case 'blandir': {
-        if (acc === 'espada') r = -0.9 + 1.5 * sierra(t * 1.3);
+        if (acc === 'espada') r = p.padre !== null && rig.porId.get(p.padre).sostiene ? -0.25 + 0.45 * sierra(t * 1.3) : -0.9 + 1.5 * sierra(t * 1.3);
         else r = Math.sin(t * 2 + f) * (mueve ? 0.25 : 0.08);
         break;
       }
@@ -482,6 +524,92 @@
       ctx.drawImage(p.canvas, p.x, p.y);
     }
     ctx.setTransform(T);
+  };
+
+  /**
+   * Deja fija la postura acomodada: mueve de verdad las líneas, el color y las marcas de cada parte
+   * a donde la niña las dejó. Así el dibujo se ve acomodado en Marcar, Colorear y en la galería.
+   * Devuelve true si cambió algo.
+   */
+  GM.hornear = function (d) {
+    const hay = d.partes.some((p) => p.reposo && (p.reposo.r || p.reposo.dx || p.reposo.dy));
+    if (!hay) { d.partes.forEach((p) => { if (p.reposo) p.reposo = null; }); return false; }
+    const rig = GM.rig(d);
+    const mats = GM.matricesRig(rig, 0, 'pose', GM.mat.id());
+    const caja = GM.cajaPose(rig);
+    const w = d.w, h = d.h, N = w * h, eff = rig.eff;
+    const m = Math.round(Math.max(w, h) * 0.03);
+    const X0 = Math.floor(caja.x0) - m, Y0 = Math.floor(caja.y0) - m;
+    const W2 = Math.max(20, Math.ceil(caja.x1) + m - X0), H2 = Math.max(20, Math.ceil(caja.y1) + m - Y0);
+    const tPx = d.tinta.getContext('2d', { willReadFrequently: true }).getImageData(0, 0, w, h).data;
+    const cPx = d.color.getContext('2d', { willReadFrequently: true }).getImageData(0, 0, w, h).data;
+
+    // Recortes de tinta, color y marca de cada etiqueta (0 = lo que no se mueve)
+    const labs = [0].concat(rig.partes.map((p) => p.id));
+    const cajas = new Map(labs.map((l) => [l, { x0: w, y0: h, x1: -1, y1: -1 }]));
+    for (let p = 0; p < N; p++) {
+      const l = cajas.has(eff[p]) ? eff[p] : 0;
+      if (l === 0 && tPx[p * 4 + 3] === 0 && cPx[p * 4 + 3] === 0) continue;
+      const c = cajas.get(l), x = p % w, y = (p - x) / w;
+      if (x < c.x0) c.x0 = x; if (x > c.x1) c.x1 = x; if (y < c.y0) c.y0 = y; if (y > c.y1) c.y1 = y;
+    }
+    const capas = new Map();
+    labs.forEach((l) => {
+      const c = cajas.get(l);
+      if (c.x1 < 0) return;
+      const cw = c.x1 - c.x0 + 1, ch = c.y1 - c.y0 + 1;
+      const t = new ImageData(cw, ch), co = new ImageData(cw, ch), mk = new ImageData(cw, ch);
+      for (let y = 0; y < ch; y++) for (let x = 0; x < cw; x++) {
+        const p = (y + c.y0) * w + (x + c.x0);
+        if ((cajas.has(eff[p]) ? eff[p] : 0) !== l) continue;
+        const o = (y * cw + x) * 4, s = p * 4;
+        for (let k = 0; k < 4; k++) { t.data[o + k] = tPx[s + k]; co.data[o + k] = cPx[s + k]; }
+        mk.data[o + 3] = 255;
+      }
+      const lienzo = (img) => { const k = GM.crearCanvas(cw, ch); k.getContext('2d').putImageData(img, 0, 0); return k; };
+      capas.set(l, { x: c.x0, y: c.y0, t: lienzo(t), c: lienzo(co), m: lienzo(mk) });
+    });
+
+    const tinta = GM.crearCanvas(W2, H2), color = GM.crearCanvas(W2, H2);
+    const tx = tinta.getContext('2d'), cx = color.getContext('2d');
+    const marca = GM.crearCanvas(W2, H2), mx = marca.getContext('2d', { willReadFrequently: true });
+    const etiquetas = new Uint8Array(W2 * H2);
+    const fijar = (ctx, mm) => {
+      let e = mm[4] - X0, f = mm[5] - Y0;
+      if (Math.abs(mm[1]) < 1e-6 && Math.abs(mm[2]) < 1e-6 && Math.abs(mm[0] - 1) < 1e-6 && Math.abs(mm[3] - 1) < 1e-6) { e = Math.round(e); f = Math.round(f); }
+      ctx.setTransform(mm[0], mm[1], mm[2], mm[3], e, f);
+    };
+    const base = capas.get(0);
+    if (base) { cx.drawImage(base.c, base.x - X0, base.y - Y0); tx.drawImage(base.t, base.x - X0, base.y - Y0); }
+    for (const p of rig.partes) {
+      const k = capas.get(p.id), mm = mats.get(p.id);
+      if (p.relleno) {
+        const pm = p.padre !== null && mats.has(p.padre) ? mats.get(p.padre) : GM.mat.id();
+        fijar(cx, pm); cx.drawImage(p.relleno.canvas, p.relleno.x, p.relleno.y);
+        fijar(tx, pm); tx.globalCompositeOperation = 'destination-out'; tx.drawImage(p.relleno.canvas, p.relleno.x, p.relleno.y); tx.globalCompositeOperation = 'source-over';
+      }
+      if (!k) continue;
+      fijar(cx, mm); cx.drawImage(k.c, k.x, k.y);
+      fijar(tx, mm);
+      tx.globalCompositeOperation = 'destination-out'; tx.drawImage(k.c, k.x, k.y);
+      tx.globalCompositeOperation = 'source-over'; tx.drawImage(k.t, k.x, k.y);
+      // marcas: la parte de más arriba se queda con el píxel
+      mx.setTransform(1, 0, 0, 1, 0, 0); mx.clearRect(0, 0, W2, H2);
+      mx.imageSmoothingEnabled = false;
+      fijar(mx, mm); mx.drawImage(k.m, k.x, k.y);
+      const md = mx.getImageData(0, 0, W2, H2).data;
+      for (let q = 0; q < W2 * H2; q++) if (md[q * 4 + 3] > 127) etiquetas[q] = p.id;
+    }
+    // el clavito se va con su parte
+    for (const p of rig.partes) {
+      const q = GM.mat.aplicar(mats.get(p.id), p.pivote.x, p.pivote.y);
+      p.datos.pivote = { x: q[0] - X0, y: q[1] - Y0 };
+    }
+    d.partes.forEach((p) => { p.reposo = null; });
+    d.w = W2; d.h = H2; d.tinta = tinta; d.color = color; d.etiquetas = etiquetas;
+    d.tintaVer = (d.tintaVer || 0) + 1; d.version = (d.version || 0) + 1;
+    d._rig = null;
+    return true;
   };
 
   /** Inversa de una matriz afín. */

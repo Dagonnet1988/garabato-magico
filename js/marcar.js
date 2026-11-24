@@ -193,7 +193,7 @@
       if (pv) {
         const s = L.aPantalla(pv.x, pv.y), r = L.cv.getBoundingClientRect();
         const q = L.aPantalla(pt.x, pt.y);
-        if (Math.hypot(s.x - q.x, s.y - q.y) < 34 && r) { S.clavo = true; recordar(); return true; }
+        if (Math.hypot(s.x - q.x, s.y - q.y) < 34 && r) { S.clavo = true; recordar(); return 'fijo'; }
       }
       if (S.herr !== 'goma' && !S.activa) { pedirParte(); return false; }
       recordar();
@@ -246,7 +246,7 @@
     const rig = GM.rig(S.d);
     const mats = GM.matricesRig(rig, 0, 'pose', GM.mat.id());
     const p = GM.parteEn(rig, mats, pt.x, pt.y, Math.max(4, Math.round(14 * L.pxPorCss())));
-    if (!p) { GM.aviso('Toca una parte marcada para moverla'); return false; }
+    if (!p) return 'mover'; // fuera de las partes: arrastrar mueve la hoja
     recordar();
     S.elegida = p.id;
     const pd = p.datos;
@@ -256,7 +256,7 @@
     S.agarre = { p, pd, piv, pm, ini: pt, r0: pd.reposo.r, dx0: pd.reposo.dx, dy0: pd.reposo.dy,
       a0: Math.atan2(pt.y - piv[1], pt.x - piv[0]) };
     L.pedir();
-    return true;
+    return 'fijo';
   }
 
   function arrastrar(pt) {
@@ -276,11 +276,23 @@
   function elegirAc(a) {
     S.ac = a;
     GM.$$('#mk-acomodo .herr').forEach((b) => b.setAttribute('aria-pressed', String(b.dataset.ac === a)));
-    $('#mk-pista').textContent = a === 'girar' ? 'Arrastra una parte para girarla alrededor de su clavito' : 'Arrastra una parte para moverla';
+    $('#mk-pista').textContent = (a === 'girar' ? 'Arrastra una parte para girarla alrededor de su clavito.' : 'Arrastra una parte para moverla.') + ' Fuera del dibujo, arrastra para mover la hoja.';
+  }
+
+  /** Al terminar de acomodar, la postura queda fija en el dibujo (se ve igual en todos lados). */
+  function fijarPostura() {
+    const d = S.d;
+    const antes = { completo: { w: d.w, h: d.h, tinta: d.tinta, color: d.color, e: d.etiquetas }, e: null, p: JSON.stringify(d.partes), a: S.activa };
+    if (!GM.hornear(d)) return;
+    S.pila.push(antes);
+    S.alfa = null; S.comps = null; S.overlaySucio = true;
+    L.ajustar();
+    GM.app.guardarLuego(d);
   }
 
   function acomodar(on) {
     if (on && S.prueba) probar(false);
+    if (!on && S.acomodar && S.d) fijarPostura();
     S.acomodar = on;
     $('#mk-acomodo').hidden = !on;
     $('#mk-herramientas').hidden = on;
@@ -310,7 +322,12 @@
   }
 
   function restaurar(u) {
-    S.d.etiquetas.set(u.e);
+    if (u.completo) {
+      const c = u.completo;
+      Object.assign(S.d, { w: c.w, h: c.h, tinta: c.tinta, color: c.color, etiquetas: c.e });
+      S.d.tintaVer++; S.alfa = null; S.comps = null; S.d._rig = null;
+      L.ajustar();
+    } else S.d.etiquetas.set(u.e);
     S.d.partes = JSON.parse(u.p);
     S.activa = parte(u.a) ? u.a : (S.d.partes[0] || {}).id || null;
     S.d.version++;
@@ -366,7 +383,7 @@
     if (S.prueba) { pista.textContent = '¡Mira cómo se mueve!'; return; }
     if (!p) { pista.textContent = 'Toca «Nueva parte» y elige qué vas a marcar'; return; }
     const txt = { pincel: 'Pinta encima de: ', varita: 'Toca una línea de: ', lazo: 'Dibuja un círculo alrededor de: ', goma: 'Pinta para borrar marcas' };
-    pista.textContent = S.herr === 'goma' ? txt.goma : txt[S.herr] + p.nombre + '. El círculo es el clavito: muévelo a donde se une.';
+    pista.textContent = S.herr === 'goma' ? txt.goma : txt[S.herr] + p.nombre + '. El círculo es el clavito: muévelo a donde se une. Para mover la hoja, deja el dedo quieto un momento y arrastra.';
   }
 
   function elegirHerr(h) {
@@ -438,7 +455,33 @@
       });
       box.appendChild(b);
     });
+    pintarUniones(p);
     $('#modal-editar').hidden = false;
+  }
+
+  /** ¿A qué parte está pegada? (se mueve con ella). Automático = la que más toca. */
+  function pintarUniones(p) {
+    const box = $('#me-unida');
+    box.textContent = '';
+    const rig = GM.rig(S.d), rp = rig.porId.get(p.id);
+    const auto = !p.unida && rp && rp.padre !== null ? (parte(rp.padre) || {}).nombre : null;
+    const opciones = [{ v: null, e: '✨', n: auto ? 'Automático (' + auto + ')' : 'Automático' }, { v: 'nada', e: '🚫', n: 'A nada' }]
+      .concat(S.d.partes.filter((q) => q.id !== p.id).map((q) => ({ v: q.id, e: q.emoji, n: q.nombre })));
+    const actual = p.unida || null;
+    opciones.forEach((o) => {
+      const b = document.createElement('button');
+      b.className = 'mov';
+      b.setAttribute('aria-pressed', String(actual === o.v));
+      b.innerHTML = '<span></span>';
+      b.querySelector('span').textContent = o.e;
+      b.appendChild(document.createTextNode(o.n));
+      b.addEventListener('click', () => {
+        p.unida = o.v;
+        p.pivote = null; // el clavito se vuelve a poner cerca de su nueva parte
+        GM.$$('.mov', box).forEach((x) => x.setAttribute('aria-pressed', String(x === b)));
+      });
+      box.appendChild(b);
+    });
   }
 
   function cerrarEditar() {
@@ -510,7 +553,7 @@
     init() {
       L = new GM.Lienzo($('#cv-marcar'), {
         tamano: () => (S.d ? { w: S.d.w, h: S.d.h } : { w: 100, h: 100 }),
-        dibujar, encima, alTocar: tocar,
+        dibujar, encima, alTocar: tocar, mantenerParaMover: true,
       });
       GM.$$('#mk-herramientas .herr').forEach((b) => b.addEventListener('click', () => elegirHerr(b.dataset.herr)));
       GM.$$('#mk-tamanos .tam').forEach((b) => b.addEventListener('click', () => elegirTam(+b.dataset.tam)));

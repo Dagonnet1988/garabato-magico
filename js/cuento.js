@@ -177,7 +177,7 @@
   }
 
   function personajesDe(esc) {
-    const todos = GM.app.dibujos();
+    const todos = GM.app.dibujosCuento();
     const prota = todos.find((d) => d.id === S.protagonista) || todos[0];
     const ids = [];
     if (prota) ids.push(prota.id);
@@ -294,7 +294,7 @@
 
   /* ---------- panel ---------- */
   function actualizar() {
-    const dibujos = GM.app.dibujos();
+    const dibujos = GM.app.dibujosCuento();
     const r = analizar($('#cu-texto').value, dibujos);
     S.escenas = r.escenas;
     const ol = $('#cu-escenas');
@@ -321,27 +321,45 @@
       const row = document.createElement('div');
       row.className = 'falta';
       const t = document.createElement('span'); t.className = 't'; t.textContent = '✏️ ' + nombre;
-      const b = document.createElement('button'); b.className = 'btn primario'; b.textContent = 'Dibujar y tomar foto';
+      row.appendChild(t);
+      // ¿ya lo dibujó para otro cuento?
+      const n = GM.normalizar(nombre);
+      const ya = GM.app.dibujos().find((d) => GM.normalizar(d.nombre).includes(n) || tokensNombre(d.nombre).includes(n));
+      if (ya) {
+        const u = document.createElement('button'); u.className = 'btn primario'; u.textContent = 'Usar mi dibujo de ' + ya.nombre;
+        u.addEventListener('click', () => { GM.app.agregarAlCuento(ya); llenarProtagonistas(); actualizar(); });
+        row.appendChild(u);
+      }
+      const b = document.createElement('button'); b.className = 'btn' + (ya ? '' : ' primario'); b.textContent = 'Dibujar y tomar foto';
       b.addEventListener('click', () => GM.app.nuevoDibujo(nombre, 'cuento'));
-      row.append(t, b);
+      row.appendChild(b);
       box.appendChild(row);
     });
     $('#cu-faltan-sec').hidden = !r.faltan.length;
     if (S.i >= S.escenas.length) S.i = 0;
     irA(S.i);
-    const texto = $('#cu-texto').value;
-    if (texto !== S.ultimoTexto || S.protagonista !== S.ultimoProta) {
-      S.ultimoTexto = texto; S.ultimoProta = S.protagonista;
-      const valor = { texto, protagonista: S.protagonista, modificado: Date.now() };
-      S.modificado = valor.modificado;
-      GM.store.guardarAjuste('cuento', valor);
-      if (!S.cargando) GM.nube.guardarCuento(valor);
+    const c = GM.app.cuentoActual();
+    const texto = $('#cu-texto').value, titulo = $('#cu-titulo').value.trim();
+    if (c && (texto !== (c.texto || '') || S.protagonista !== c.protagonista || (titulo && titulo !== c.titulo))) {
+      c.texto = texto; c.protagonista = S.protagonista;
+      if (titulo) c.titulo = titulo;
+      GM.app.guardarCuento(c);
     }
+  }
+
+  /** Muestra el texto del cuento elegido. */
+  function cargar() {
+    const c = GM.app.cuentoActual();
+    S.de = c;
+    $('#cu-titulo').value = c ? c.titulo : '';
+    $('#cu-texto').value = c ? c.texto || '' : '';
+    S.protagonista = c ? c.protagonista : null;
+    S.i = 0;
   }
 
   function llenarProtagonistas() {
     const sel = $('#cu-protagonista');
-    const dibujos = GM.app.dibujos();
+    const dibujos = GM.app.dibujosCuento();
     sel.textContent = '';
     dibujos.forEach((d) => {
       const o = document.createElement('option'); o.value = d.id; o.textContent = d.nombre; sel.appendChild(o);
@@ -351,15 +369,11 @@
   }
 
   GM.cuento = {
-    async init() {
+    init() {
       cv = $('#cv-cuento'); ctx = cv.getContext('2d');
       new ResizeObserver(redimensionar).observe(cv.parentElement);
-      const guardado = await GM.store.leerAjuste('cuento');
-      $('#cu-texto').value = guardado && guardado.texto ? guardado.texto : GM.MUESTRA.cuento;
-      S.protagonista = guardado ? guardado.protagonista : null;
-      S.modificado = (guardado && guardado.modificado) || 0;
-      S.ultimoTexto = $('#cu-texto').value; S.ultimoProta = S.protagonista;
       $('#cu-texto').addEventListener('input', GM.debounce(actualizar, 400));
+      $('#cu-titulo').addEventListener('input', GM.debounce(actualizar, 400));
       $('#cu-protagonista').addEventListener('change', (e) => { S.protagonista = e.target.value; actualizar(); });
       $('#cu-play').addEventListener('click', () => (S.jugando ? parar() : jugar()));
       $('#cu-sig').addEventListener('click', () => siguiente(false));
@@ -368,6 +382,9 @@
     },
     abrir() {
       S.visible = true;
+      // si vuelve al mismo cuento y no cambió en otro equipo, se queda donde estaba
+      const c = GM.app.cuentoActual();
+      if (S.de !== c || (c && $('#cu-texto').value !== (c.texto || ''))) cargar();
       llenarProtagonistas();
       redimensionar();
       actualizar();
@@ -376,17 +393,5 @@
     },
     cerrar() { S.visible = false; parar(); cancelAnimationFrame(S.anim); },
     analizar,
-    /** El cuento escrito en otro equipo, si es más nuevo que el de aquí. */
-    desdeNube(v) {
-      if (!v || !v.texto || (v.modificado || 0) <= (S.modificado || 0)) {
-        if (v && (v.modificado || 0) < (S.modificado || 0)) GM.nube.guardarCuento({ texto: S.ultimoTexto, protagonista: S.protagonista, modificado: S.modificado });
-        return;
-      }
-      $('#cu-texto').value = v.texto;
-      S.protagonista = v.protagonista || S.protagonista;
-      S.ultimoTexto = v.texto; S.ultimoProta = S.protagonista; S.modificado = v.modificado;
-      GM.store.guardarAjuste('cuento', { texto: v.texto, protagonista: S.protagonista, modificado: v.modificado });
-      if (S.visible) { llenarProtagonistas(); actualizar(); }
-    },
   };
 })(window.GM);
