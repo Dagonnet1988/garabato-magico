@@ -465,10 +465,33 @@
     GM.aviso('Se trajeron los cambios de la nube ☁️');
   }
 
-  /** De la pantalla de inicio a «Mis cuentos» (con el ejemplo si el equipo está vacío). */
-  async function salirDelInicio() {
-    if (A.pantalla !== 'inicio') return;
-    if (!A.dibujos.length && !(await GM.store.leerAjuste('muestraCreada'))) {
+  /* ---------- espacios: la cuenta y «sin cuenta» ---------- */
+  const sinCuentaElegido = () => { try { return localStorage.getItem('gm-sin-cuenta') === '1'; } catch (e) { return false; } };
+  const elegirSinCuenta = (v) => { try { if (v) localStorage.setItem('gm-sin-cuenta', '1'); else localStorage.removeItem('gm-sin-cuenta'); } catch (e) { /* nada */ } };
+
+  /** Lo que quedó en este equipo sin dueño (de antes de usar cuentas) pasa a «sin cuenta», para no perderlo. */
+  async function guardarLoSuelto() {
+    GM.store.espacio('cuenta');
+    if (!(await GM.store.leerAjuste('duenio')) && (await GM.store.tieneAlgo())) await GM.store.moverA('local');
+  }
+
+  /** Usar el espacio de la cuenta: solo con lo de esa cuenta. */
+  async function usarEspacioCuenta(alAbrir) {
+    GM.store.espacio('cuenta');
+    const yo = GM.nube.usuario(), duenio = await GM.store.leerAjuste('duenio');
+    if (duenio && duenio !== yo) await GM.store.vaciar();
+    else if (!duenio && !alAbrir && (await GM.store.tieneAlgo())) await GM.store.moverA('local');
+    await GM.store.guardarAjuste('duenio', yo);
+  }
+
+  /** Carga los dibujos, cuentos y perfil del espacio actual. */
+  async function cargarDatos() {
+    A.dibujos = await GM.store.listar();
+    A.dibujos.forEach((d) => { d.version = 1; d.tintaVer = 1; });
+    // posturas acomodadas con la versión anterior: quedan fijas en el dibujo
+    for (const d of A.dibujos) if (GM.hornear(d)) await persistir(d);
+    // el ejemplo solo aparece en la vista previa sin nube
+    if (!GM.nube.disponible() && !A.dibujos.length && !(await GM.store.leerAjuste('muestraCreada'))) {
       try {
         const m = await crearMuestra();
         A.dibujos.push(m);
@@ -476,9 +499,22 @@
         await GM.store.guardarAjuste('muestraCreada', true);
       } catch (e) { console.warn('No se pudo cargar el ejemplo', e); }
     }
-    if (!vivos().length && A.dibujos.length) { await GM.store.guardarAjuste('cuentos', null); await migrarCuentos(); }
-    if (!A.cuento) abrirCuento(vivos()[0] || null);
+    A.cuentos = []; A.cuento = null; A.actual = null;
+    await migrarCuentos();
+    A.perfil = (await GM.store.leerAjuste('perfil')) || { nombre: '', modificado: 0 };
+    pintarPerfil();
+    const idActual = await GM.store.leerAjuste('cuentoActual');
+    const c0 = vivos().find((c) => c.id === idActual);
+    if (c0) abrirCuento(c0);
+  }
+
+  /** Después de entrar a una cuenta: solo lo de esa cuenta (lo de «sin cuenta» queda aparte). */
+  async function alEntrar() {
+    elegirSinCuenta(false);
+    await usarEspacioCuenta(false);
+    await cargarDatos();
     ir('cuentos');
+    await sincronizar();
     if (!A.perfil.nombre && !(await GM.store.leerAjuste('perfilPreguntado'))) abrirPerfil();
   }
 
@@ -499,16 +535,12 @@
     b.disabled = false;
     if (!ok) { errorCuenta('No pude subir los últimos cambios a la nube. Revisa el internet y prueba otra vez, así no se pierde nada.'); return; }
     await GM.nube.cerrarSesion();
-    for (const d of A.dibujos) await GM.store.borrar(d.id);
+    // la copia de la cuenta sale de este equipo (sigue en la nube)
+    GM.store.espacio('cuenta');
+    await GM.store.vaciar();
+    elegirSinCuenta(false);
     A.dibujos = []; A.cuentos = []; A.cuento = null; A.actual = null;
     A.perfil = { nombre: '', modificado: 0 };
-    await GM.nube.limpiarPendientes();
-    await GM.store.guardarAjuste('cuentos', []);
-    await GM.store.guardarAjuste('perfil', A.perfil);
-    await GM.store.guardarAjuste('cuentoActual', null);
-    await GM.store.guardarAjuste('sinCuenta', false);
-    await GM.store.guardarAjuste('muestraCreada', false);
-    await GM.store.guardarAjuste('perfilPreguntado', false);
     pintarPerfil();
     $('#modal-cuenta').hidden = true;
     mostrar('inicio');
@@ -612,8 +644,7 @@
         await GM.nube.entrar(c.email, c.clave);
         $('#modal-cuenta').hidden = true; $('#cn-clave').value = '';
         GM.aviso('¡Listo! Tus dibujos se guardan en la nube');
-        await salirDelInicio();
-        sincronizar();
+        await alEntrar();
       } catch (e) { errorCuenta(traducir(e.message)); }
       $('#cn-entrar').disabled = false;
     };
@@ -627,8 +658,7 @@
         if (lista) {
           $('#modal-cuenta').hidden = true; $('#cn-clave').value = '';
           GM.aviso('¡Cuenta creada! Tus dibujos se guardan en la nube');
-          await salirDelInicio();
-          sincronizar();
+          await alEntrar();
         } else {
           $('#cn-error').hidden = true;
           const ok = $('#cn-ok');
@@ -642,8 +672,11 @@
     $('#cn-salir').addEventListener('click', cerrarSesion);
     $('#in-entrar').addEventListener('click', abrirCuenta);
     $('#in-sin-cuenta').addEventListener('click', async () => {
-      await GM.store.guardarAjuste('sinCuenta', true);
-      await salirDelInicio();
+      elegirSinCuenta(true);
+      GM.store.espacio('local');
+      await cargarDatos();
+      ir('cuentos');
+      if (!A.perfil.nombre && !(await GM.store.leerAjuste('perfilPreguntado'))) abrirPerfil();
     });
 
     $('#dibujar-aqui').addEventListener('click', () => pedirNombreDibujo(''));
@@ -657,26 +690,13 @@
     await GM.nube.iniciar();
     // Pedir al navegador que no borre los dibujos guardados cuando le falte espacio
     try { if (navigator.storage && navigator.storage.persist) navigator.storage.persist(); } catch (e) { /* nada */ }
-    A.dibujos = await GM.store.listar();
-    A.dibujos.forEach((d) => { d.version = 1; d.tintaVer = 1; });
-    // posturas acomodadas con la versión anterior: quedan fijas en el dibujo
-    for (const d of A.dibujos) if (GM.hornear(d)) await persistir(d);
-    if (!A.dibujos.length && !(await GM.store.leerAjuste('muestraCreada'))) {
-      try {
-        const m = await crearMuestra();
-        A.dibujos.push(m);
-        await persistir(m);
-        await GM.store.guardarAjuste('muestraCreada', true);
-      } catch (e) { console.warn('No se pudo cargar el ejemplo', e); }
+    if (GM.nube.disponible()) {
+      if (GM.nube.correo()) await usarEspacioCuenta(true);
+      else if (sinCuentaElegido()) GM.store.espacio('local');
+      else { await guardarLoSuelto(); mostrar('inicio'); return; }
     }
-    await migrarCuentos();
-    A.perfil = (await GM.store.leerAjuste('perfil')) || { nombre: '', modificado: 0 };
-    pintarPerfil();
-    const idActual = await GM.store.leerAjuste('cuentoActual');
-    const c0 = vivos().find((c) => c.id === idActual);
-    if (c0) abrirCuento(c0);
+    await cargarDatos();
     const h = (location.hash || '').slice(1);
-    if (GM.nube.disponible() && !GM.nube.correo() && !(await GM.store.leerAjuste('sinCuenta'))) { mostrar('inicio'); return; }
     ir(A.cuento && ['dibujos', 'marcar', 'colorear', 'cuento'].includes(h) ? h : 'cuentos');
     if (!A.perfil.nombre && !(await GM.store.leerAjuste('perfilPreguntado'))) abrirPerfil();
 

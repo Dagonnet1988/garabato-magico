@@ -237,8 +237,10 @@
     },
 
     /** Avisar que un dibujo cambió (se sube en un momento). */
+    usuario: () => (sesion && sesion.user && sesion.user.id) || '',
+
     async cambio(d) {
-      if (!this.disponible()) return;
+      if (!this.disponible() || !sesion) return;
       const p = await pendientes();
       p[d.id] = 'subir';
       await guardarPendientes(p);
@@ -246,7 +248,7 @@
     },
 
     async borrado(id) {
-      if (!this.disponible()) return;
+      if (!this.disponible() || !sesion) return;
       const p = await pendientes();
       p[id] = 'borrar';
       await guardarPendientes(p);
@@ -266,7 +268,7 @@
 
     /** Avisar que cambió un ajuste (perfil o un cuento). */
     async ajusteCambio(clave) {
-      if (!this.disponible()) return;
+      if (!this.disponible() || !sesion) return;
       const p = await pendientes();
       p['aj:' + clave] = 'ajuste';
       await guardarPendientes(p);
