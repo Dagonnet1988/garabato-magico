@@ -22,7 +22,7 @@ Pensada para iPad. Funciona sin internet una vez cargada y sin IA: todo pasa en 
 
    El círculo blanco es el **clavito**: muévelo al lugar donde la parte se une al cuerpo (la cadera para una pierna, el hombro para un ala). Toca **▶ ¡Probar!** para verlo saltar, volar, bailar...
 3. **Colorear**: rellena formas cerradas, usa el crayón, agrega líneas con el lápiz o borra. Lo que pintas se mueve con su parte.
-4. **Historia**: escribe tu cuento. Toca el movimiento debajo de cada escena para elegir otro a mano, y arrastra un dibujo en la escena para ponerlo donde quieras (con «Más grande / Más pequeño» cambias su tamaño). Cada oración es una escena. Palabras como *salta, vuela, corre, baila, espada, mira, duerme* mueven al personaje; *bosque, mar, noche, cielo, casa, montaña* cambian el fondo. Si nombras a alguien que todavía no dibujaste, la app te pide que lo dibujes.
+4. **Historia**: escribe tu cuento. Toca el movimiento o el lugar debajo de cada escena para elegir otro a mano (campo, bosque, río, mar, montañas, cielo, noche, casa, ciudad, desierto, nieve, espacio), y arrastra un dibujo en la escena para ponerlo donde quieras (con «Más grande / Más pequeño» cambias su tamaño). Cada oración es una escena. Palabras como *salta, vuela, corre, baila, espada, mira, duerme* mueven al personaje; *bosque, mar, noche, cielo, casa, montaña* cambian el fondo. Si nombras a alguien que todavía no dibujaste, la app te pide que lo dibujes.
 
 ## Abrirla en el iPad
 

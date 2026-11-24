@@ -38,21 +38,38 @@
     ['mirar', /\b(mir|observ|busc|vio |ve )/],
     ['hablar', /\b(dic|dij|habl|grit|cant|pregunt|respond|llam)/],
     ['triste', /\b(trist|llor|mied|asust)/],
-    ['feliz', /\b(feliz|felic|rie|rio|alegr|content|celebr|jueg|jug|ama |abraz)/],
+    ['feliz', /\b(feliz|felic|rie|alegr|content|celebr|jueg|jug|ama |abraz)/],
   ];
   const LUGAR_RE = [
+    ['espacio', /\b(espacio|planeta|astronaut|marte|galaxia)/],
     ['noche', /\b(noche|luna|estrella|oscur)/],
-    ['mar', /\b(mar|playa|agua|rio|lago|ola|olas|nada|nado)\b/],
+    ['nieve', /\b(nieve|nevad|hielo|helad|invierno|pinguino|iglu)/],
+    ['desierto', /\b(desierto|arena|cactus|camello|duna)/],
+    ['rio', /\b(rio|rios|lago|arroyo|cascada|charco)\b/],
+    ['mar', /\b(mar|playa|ola|olas|oceano|nada|nado|barco)\b/],
     ['bosque', /\b(bosque|arbol|arboles|selva|jungla)/],
     ['cielo', /\b(cielo|nube|nubes)/],
     ['casa', /\b(casa|cuarto|cocina|escuela|cama)/],
-    ['montana', /\b(montan|cueva|volcan)/],
+    ['ciudad', /\b(ciudad|calle|edificio|parque|tienda|pueblo)/],
+    ['montana', /\b(montan|cueva|volcan|cerro)/],
+  ];
+  GM.LUGARES = [
+    { id: 'campo', nombre: 'Campo', emoji: '🌼' }, { id: 'bosque', nombre: 'Bosque', emoji: '🌳' },
+    { id: 'rio', nombre: 'Río', emoji: '🏞️' }, { id: 'mar', nombre: 'Mar', emoji: '🌊' },
+    { id: 'montana', nombre: 'Montañas', emoji: '⛰️' }, { id: 'cielo', nombre: 'Cielo', emoji: '☁️' },
+    { id: 'noche', nombre: 'Noche', emoji: '🌙' }, { id: 'casa', nombre: 'Casa', emoji: '🏠' },
+    { id: 'ciudad', nombre: 'Ciudad', emoji: '🏙️' }, { id: 'desierto', nombre: 'Desierto', emoji: '🏜️' },
+    { id: 'nieve', nombre: 'Nieve', emoji: '❄️' }, { id: 'espacio', nombre: 'Espacio', emoji: '🪐' },
   ];
   // Personajes y cosas que, si aparecen en el cuento, se le pide dibujar
   const LEXICO = ['mamá', 'papá', 'hermano', 'hermana', 'abuela', 'abuelo', 'amigo', 'amiga', 'perro', 'perrito', 'gato', 'gatito', 'dragón',
     'princesa', 'príncipe', 'rey', 'reina', 'bruja', 'mago', 'monstruo', 'pájaro', 'loro', 'pez', 'conejo', 'oso', 'león', 'tigre', 'mono',
     'caballo', 'unicornio', 'hada', 'robot', 'maestra', 'maestro', 'bebé', 'ratón', 'vaca', 'pollito', 'tortuga', 'mariposa', 'pato',
-    'árbol', 'nido', 'castillo', 'barco', 'cohete', 'flor', 'pastel', 'tesoro'];
+    'árbol', 'nido', 'castillo', 'barco', 'cohete', 'flor', 'pastel', 'tesoro', 'jaula', 'carro', 'avión', 'tren', 'bicicleta',
+    'pelota', 'globo', 'cometa', 'muñeca', 'juguete', 'nave', 'puente', 'casita', 'corona', 'varita', 'escoba', 'sombrilla', 'llave',
+    'caja', 'cofre', 'regalo', 'serpiente', 'araña', 'abeja', 'rana', 'búho', 'águila', 'gallina', 'cerdo', 'oveja', 'jirafa',
+    'elefante', 'cocodrilo', 'tiburón', 'ballena', 'delfín', 'pulpo', 'pingüino', 'dinosaurio', 'zorro', 'lobo', 'ardilla', 'fantasma',
+    'pirata', 'ninja', 'superhéroe', 'sirena', 'duende', 'gigante', 'tía', 'tío', 'prima', 'primo'];
   const NO_NOMBRES = new Set(['un', 'una', 'el', 'la', 'los', 'las', 'despues', 'luego', 'entonces', 'cuando', 'y', 'pero', 'fin', 'en', 'de', 'con', 'por', 'al', 'del', 'su', 'sus', 'mi', 'tu', 'yo', 'el', 'ella', 'ellos', 'hola', 'adios', 'si', 'no']);
 
   function tokensNombre(n) { return GM.normalizar(n).split(/[^a-z0-9]+/).filter((t) => t.length >= 3); }
@@ -74,8 +91,9 @@
       const norm = ' ' + GM.normalizar(f) + ' ';
       let accion = 'quieto';
       for (const [a, re] of ACCION_RE) if (re.test(norm)) { accion = a; break; }
-      for (const [l, re] of LUGAR_RE) if (re.test(norm)) { lugar = l; break; }
-      const esc = { texto: f, accion, lugar: accion === 'volar' && lugar === 'campo' ? 'cielo' : lugar, ids: [] };
+      let propio = false;
+      for (const [l, re] of LUGAR_RE) if (re.test(norm)) { lugar = l; propio = true; break; }
+      const esc = { texto: f, accion, lugar: accion === 'volar' && lugar === 'campo' ? 'cielo' : lugar, lugarBase: lugar, propio, ids: [] };
       dibujos.forEach((d) => { if (dibujoMencionado(d, norm)) esc.ids.push(d.id); });
       // ¿Falta dibujar a alguien?
       for (const palabra of LEXICO) {
@@ -119,10 +137,86 @@
     const suelo = H * 0.8;
     const g = ctx.createLinearGradient(0, 0, 0, suelo);
     const cielos = { noche: ['#0d1b3d', '#2a3f7a'], mar: ['#7cc6f2', '#cdeefe'], bosque: ['#a8dcf5', '#e2f5ff'], cielo: ['#5fb0ef', '#cfe9ff'],
-      casa: ['#f6e2c4', '#fbefdc'], montana: ['#9fd0f0', '#e6f4ff'], campo: ['#8fd0f7', '#e4f5ff'] };
+      casa: ['#f6e2c4', '#fbefdc'], montana: ['#9fd0f0', '#e6f4ff'], campo: ['#8fd0f7', '#e4f5ff'], rio: ['#8fd0f7', '#e4f5ff'],
+      desierto: ['#f7b267', '#fde4b8'], nieve: ['#b9d7ee', '#eef6fc'], ciudad: ['#9cc9ee', '#e8f3ff'], espacio: ['#05060f', '#1b1f45'] };
     const [c1, c2] = cielos[lugar] || cielos.campo;
     g.addColorStop(0, c1); g.addColorStop(1, c2);
     ctx.fillStyle = g; ctx.fillRect(0, 0, W, H);
+    const circulo = (x, y, r, c) => { ctx.fillStyle = c; ctx.beginPath(); ctx.arc(x, y, r, 0, Math.PI * 2); ctx.fill(); };
+    if (lugar === 'espacio') {
+      for (let i = 0; i < 70; i++) {
+        const x = (i * 613) % W, y = (i * 271) % (H * 0.85), a = 0.4 + 0.6 * Math.abs(Math.sin(t * 1.5 + i));
+        ctx.fillStyle = 'rgba(255,255,255,' + a.toFixed(2) + ')'; ctx.fillRect(x, y, 3, 3);
+      }
+      circulo(W * 0.8, H * 0.22, 70, '#e07a5f');
+      ctx.strokeStyle = '#f2cc8f'; ctx.lineWidth = 8; ctx.beginPath(); ctx.ellipse(W * 0.8, H * 0.22, 120, 26, -0.3, 0, Math.PI * 2); ctx.stroke();
+      circulo(W * 0.15, H * 0.15, 26, '#81b29a');
+      ctx.fillStyle = '#8d8fa3'; ctx.fillRect(0, suelo, W, H - suelo);
+      [[0.2, 0.86, 40], [0.55, 0.92, 26], [0.85, 0.88, 34]].forEach(([x, y, r]) => { ctx.fillStyle = '#6f7186'; ctx.beginPath(); ctx.ellipse(W * x, H * y, r, r * 0.35, 0, 0, Math.PI * 2); ctx.fill(); });
+      return suelo;
+    }
+    if (lugar === 'nieve') {
+      ctx.fillStyle = '#ffffff';
+      ctx.beginPath(); ctx.moveTo(0, suelo); ctx.lineTo(W * 0.3, suelo * 0.45); ctx.lineTo(W * 0.62, suelo); ctx.fill();
+      ctx.beginPath(); ctx.moveTo(W * 0.4, suelo); ctx.lineTo(W * 0.78, suelo * 0.35); ctx.lineTo(W * 1.1, suelo); ctx.fill();
+      [[0.1, 1], [0.9, 1.2]].forEach(([x, s]) => {
+        const px = W * x;
+        ctx.fillStyle = '#2f6b4f';
+        for (let k = 0; k < 3; k++) { ctx.beginPath(); ctx.moveTo(px, suelo - (150 - k * 40) * s); ctx.lineTo(px - (50 + k * 12) * s, suelo - (70 - k * 30) * s); ctx.lineTo(px + (50 + k * 12) * s, suelo - (70 - k * 30) * s); ctx.fill(); }
+      });
+      ctx.fillStyle = '#f4f8fc'; ctx.fillRect(0, suelo, W, H - suelo);
+      for (let i = 0; i < 60; i++) {
+        const x = ((i * 131 + t * 25 * (1 + (i % 3))) % W), y = ((i * 197 + t * 60 * (1 + (i % 2))) % H);
+        circulo(x, y, 2 + (i % 3), 'rgba(255,255,255,.9)');
+      }
+      return suelo;
+    }
+    if (lugar === 'desierto') {
+      circulo(W - 150, 110, 60, '#fff3b0');
+      ctx.fillStyle = '#e9c46a';
+      ctx.beginPath(); ctx.moveTo(0, suelo); ctx.quadraticCurveTo(W * 0.25, suelo * 0.7, W * 0.55, suelo); ctx.fill();
+      ctx.beginPath(); ctx.moveTo(W * 0.4, suelo); ctx.quadraticCurveTo(W * 0.75, suelo * 0.75, W * 1.05, suelo); ctx.fill();
+      ctx.fillStyle = '#f2d08b'; ctx.fillRect(0, suelo, W, H - suelo);
+      [[0.12, 1], [0.86, 1.3]].forEach(([x, s]) => {
+        const px = W * x;
+        ctx.fillStyle = '#3a8a4f';
+        ctx.fillRect(px - 14 * s, suelo - 130 * s, 28 * s, 130 * s);
+        ctx.fillRect(px - 48 * s, suelo - 95 * s, 16 * s, 45 * s); ctx.fillRect(px - 48 * s, suelo - 60 * s, 40 * s, 14 * s);
+        ctx.fillRect(px + 32 * s, suelo - 110 * s, 16 * s, 45 * s); ctx.fillRect(px + 10 * s, suelo - 75 * s, 38 * s, 14 * s);
+      });
+      return suelo;
+    }
+    if (lugar === 'ciudad') {
+      nubes(t, 'rgba(255,255,255,.85)');
+      const edificios = [[0, 0.32, '#8e9aaf'], [0.13, 0.5, '#6c7a96'], [0.27, 0.38, '#a3b1c6'], [0.42, 0.58, '#5d6b87'], [0.58, 0.42, '#8e9aaf'], [0.72, 0.52, '#6c7a96'], [0.86, 0.36, '#a3b1c6']];
+      edificios.forEach(([x, alto, c]) => {
+        const bx = W * x, bw = W * 0.13, top = suelo - suelo * alto;
+        ctx.fillStyle = c; ctx.fillRect(bx, top, bw, suelo - top);
+        ctx.fillStyle = '#ffe08a';
+        for (let yy = top + 18; yy < suelo - 30; yy += 38) for (let xx = bx + 14; xx < bx + bw - 20; xx += 34) ctx.fillRect(xx, yy, 16, 20);
+      });
+      ctx.fillStyle = '#5a5f6b'; ctx.fillRect(0, suelo, W, H - suelo);
+      ctx.fillStyle = '#f5f5f5'; for (let x = 20; x < W; x += 120) ctx.fillRect(x, suelo + (H - suelo) / 2 - 5, 60, 10);
+      return suelo;
+    }
+    if (lugar === 'rio') {
+      circulo(130, 110, 50, '#ffd54a');
+      nubes(t, 'rgba(255,255,255,.9)');
+      ctx.fillStyle = '#7f8fa8';
+      ctx.beginPath(); ctx.moveTo(W * 0.3, suelo * 0.75); ctx.lineTo(W * 0.5, suelo * 0.45); ctx.lineTo(W * 0.72, suelo * 0.75); ctx.fill();
+      ctx.fillStyle = '#6cbf5a'; ctx.fillRect(0, suelo * 0.75, W, H - suelo * 0.75);
+      // el río baja serpenteando desde la montaña
+      ctx.fillStyle = '#3d9be0';
+      ctx.beginPath();
+      ctx.moveTo(W * 0.47, suelo * 0.75); ctx.lineTo(W * 0.53, suelo * 0.75);
+      ctx.bezierCurveTo(W * 0.62, suelo * 0.88, W * 0.3, H * 0.9, W * 0.42, H);
+      ctx.lineTo(W * 0.68, H);
+      ctx.bezierCurveTo(W * 0.5, H * 0.9, W * 0.75, suelo * 0.88, W * 0.53, suelo * 0.75);
+      ctx.fill();
+      ctx.strokeStyle = 'rgba(255,255,255,.7)'; ctx.lineWidth = 4;
+      for (let i = 0; i < 4; i++) { const yy = suelo * 0.85 + i * 40, xx = W * 0.5 + Math.sin(t * 2 + i) * 20; ctx.beginPath(); ctx.moveTo(xx - 20, yy); ctx.lineTo(xx + 20, yy); ctx.stroke(); }
+      return suelo;
+    }
     if (lugar === 'noche') {
       ctx.fillStyle = '#fff8d0';
       ctx.beginPath(); ctx.arc(W - 160, 120, 46, 0, Math.PI * 2); ctx.fill();
@@ -231,11 +325,11 @@
       // sombra
       ctx.fillStyle = 'rgba(0,0,0,.12)';
       ctx.beginPath(); ctx.ellipse(caja.pie.x, caja.pie.y, bw * 0.35, bh * 0.04, 0, 0, Math.PI * 2); ctx.fill();
-      if (esc.lugar === 'noche') { ctx.shadowColor = 'rgba(255,255,240,.85)'; ctx.shadowBlur = 10; }
+      if (esc.lugar === 'noche' || esc.lugar === 'espacio') { ctx.shadowColor = 'rgba(255,255,240,.85)'; ctx.shadowBlur = 10; }
       GM.dibujarRig(ctx, rig, t + k * 0.7, acc, { raiz: GM.raiz(rig, t + k * 0.7, acc, W / s * 0.5) });
       ctx.shadowBlur = 0; ctx.shadowColor = 'transparent';
       if (acc === 'dormir') {
-        ctx.fillStyle = '#ffffff'; ctx.font = '700 ' + Math.round(60 / s * 0.6) + 'px Fredoka, sans-serif';
+        ctx.fillStyle = esc.lugar === 'noche' || esc.lugar === 'espacio' ? '#ffffff' : '#3b4a8a'; ctx.font = '700 ' + Math.round(60 / s * 0.6) + 'px Fredoka, sans-serif';
         const z = (t % 2) / 2;
         ctx.globalAlpha = 1 - z;
         ctx.fillText('Z z z', caja.x1, caja.y0 - z * 80 / s);
@@ -250,6 +344,7 @@
       }
     });
     texto(esc.texto);
+    pintarTamano();
   }
 
   function bucle() {
@@ -328,10 +423,16 @@
     const dibujos = GM.app.dibujosCuento();
     const r = analizar($('#cu-texto').value, dibujos);
     S.escenas = r.escenas;
+    let lugarActual = null;
     S.escenas.forEach((e) => {
       e.auto = e.accion;
       const inf = infoEscena(e);
       if (inf && inf.accion) { e.accion = inf.accion; e.manual = true; }
+      // el lugar elegido a mano sigue en las escenas siguientes, hasta que el cuento nombre otro
+      e.lugarAuto = e.lugar;
+      if (inf && inf.lugar) { e.lugar = inf.lugar; e.lugarManual = true; lugarActual = inf.lugar; }
+      else if (e.propio) lugarActual = null;
+      else if (lugarActual) e.lugar = lugarActual;
     });
     const ol = $('#cu-escenas');
     ol.textContent = '';
@@ -348,7 +449,12 @@
       mov.setAttribute('aria-label', 'Cambiar el movimiento de esta escena');
       mov.addEventListener('click', (ev) => { ev.stopPropagation(); irA(k); elegirMovimiento(k); });
       chips.appendChild(mov);
-      const lu = document.createElement('span'); lu.className = 'chip'; lu.textContent = '📍 ' + e.lugar.replace('montana', 'montaña');
+      const lg = GM.LUGARES.find((x) => x.id === e.lugar) || GM.LUGARES[0];
+      const lu = document.createElement('button');
+      lu.className = 'chip cambiar' + (e.lugarManual ? ' manual' : '');
+      lu.textContent = lg.emoji + ' ' + lg.nombre + ' ▾';
+      lu.setAttribute('aria-label', 'Cambiar el lugar de esta escena');
+      lu.addEventListener('click', (ev) => { ev.stopPropagation(); irA(k); elegirLugar(k); });
       chips.appendChild(lu);
       div.appendChild(chips);
       li.appendChild(div);
@@ -397,6 +503,33 @@
     S.i = 0;
   }
 
+  /** Elegir a mano el lugar (fondo) de una escena. */
+  function elegirLugar(k) {
+    const esc = S.escenas[k];
+    if (!esc) return;
+    const box = $('#ml-lista');
+    box.textContent = '';
+    const auto = GM.LUGARES.find((x) => x.id === esc.lugarAuto);
+    [{ id: null, emoji: '✨', nombre: 'Lo que dice el cuento' + (auto ? ' (' + auto.nombre + ')' : '') }].concat(GM.LUGARES).forEach((o) => {
+      const b = document.createElement('button');
+      b.className = 'accion';
+      b.setAttribute('aria-pressed', String(o.id === null ? !esc.lugarManual : esc.lugarManual && esc.lugar === o.id));
+      b.innerHTML = '<span></span>';
+      b.querySelector('span').textContent = o.emoji;
+      b.appendChild(document.createTextNode(o.nombre));
+      b.addEventListener('click', () => {
+        const inf = infoEscena(esc, true);
+        if (o.id) inf.lugar = o.id; else delete inf.lugar;
+        $('#modal-lugar').hidden = true;
+        GM.app.guardarCuento();
+        actualizar();
+      });
+      box.appendChild(b);
+    });
+    $('#ml-escena').textContent = '«' + esc.texto + '»';
+    $('#modal-lugar').hidden = false;
+  }
+
   /** Elegir a mano el movimiento de una escena. */
   function elegirMovimiento(k) {
     const esc = S.escenas[k];
@@ -430,8 +563,13 @@
     const r = cv.getBoundingClientRect();
     return { x: (ev.clientX - r.left) * (W / r.width), y: (ev.clientY - r.top) * (H / r.height) };
   }
+  /** El dibujo al que se le cambia el tamaño: el que se tocó, o el protagonista. */
+  const elegido = () => (S.cajas.find((x) => x.id === S.sel) || S.cajas[0] || null);
   function pintarTamano() {
-    const c = S.cajas.find((x) => x.id === S.sel);
+    const c = elegido();
+    const firma = c ? c.id + c.nombre : '';
+    if (firma === S.firmaTam) return;
+    S.firmaTam = firma;
     $('#cu-tam').hidden = !c;
     if (c) $('#cu-tam-n').textContent = c.nombre;
   }
@@ -488,13 +626,17 @@
       cv.addEventListener('pointermove', arrastrarEscena);
       cv.addEventListener('pointerup', soltarEscena);
       cv.addEventListener('pointercancel', soltarEscena);
-      $('#cu-tam-mas').addEventListener('click', () => { const p = posDe(S.i, S.sel); ponerPos(S.sel, { e: Math.min(3, ((p && p.e) || 1) * 1.2) }); });
-      $('#cu-tam-menos').addEventListener('click', () => { const p = posDe(S.i, S.sel); ponerPos(S.sel, { e: Math.max(0.25, ((p && p.e) || 1) / 1.2) }); });
+      const tam = (f) => { const c = elegido(); if (!c) return; const p = posDe(S.i, c.id); ponerPos(c.id, { e: Math.max(0.25, Math.min(3, ((p && p.e) || 1) * f)) }); };
+      $('#cu-tam-mas').addEventListener('click', () => tam(1.2));
+      $('#cu-tam-menos').addEventListener('click', () => tam(1 / 1.2));
+      // con el mouse, la rueda encima de la escena también cambia el tamaño
+      cv.addEventListener('wheel', (e) => { e.preventDefault(); tam(e.deltaY < 0 ? 1.08 : 1 / 1.08); }, { passive: false });
       $('#cu-tam-volver').addEventListener('click', () => {
-        const c = GM.app.cuentoActual();
-        if (c && c.escenaInfo) Object.values(c.escenaInfo).forEach((inf) => { if (inf.pos) delete inf.pos[S.sel]; });
+        const el = elegido(), c = GM.app.cuentoActual();
+        if (el && c && c.escenaInfo) Object.values(c.escenaInfo).forEach((inf) => { if (inf.pos) delete inf.pos[el.id]; });
         guardarLuego();
       });
+      $('#ml-cerrar').addEventListener('click', () => { $('#modal-lugar').hidden = true; });
       $('#ma-cerrar').addEventListener('click', () => { $('#modal-accion').hidden = true; });
       $('#cu-titulo').addEventListener('input', GM.debounce(actualizar, 400));
       $('#cu-protagonista').addEventListener('change', (e) => { S.protagonista = e.target.value; actualizar(); });
