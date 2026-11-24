@@ -179,3 +179,11 @@ h3{font-size:17px;color:var(--muted);font-weight:600}
 .ayuda.error{color:#b3261e}
 @media (max-width:1000px){.marca-de{display:block;font-size:17px}.paso{padding:9px 12px}}
 @media (max-width:900px){.paso span:last-child{display:none}}
+
+.tarjeta .quitar.editar{right:56px;color:var(--ink)}
+.redondo.chico{width:44px;height:44px;font-size:20px;vertical-align:middle}
+.en-cuento{margin-left:auto;margin-right:10px;font-family:var(--display);font-weight:600;color:var(--muted);max-width:26vw;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+@media (max-width:900px){.en-cuento{display:none}}
+.escenas .chip.cambiar{border:2px solid var(--line);cursor:pointer;font-family:inherit;min-height:32px;padding:3px 10px;font-size:13px;color:var(--ink)}
+.escenas .chip.cambiar.manual{border-color:var(--crayon);color:var(--crayon)}
+.pista-escena{margin:6px 4px 0;text-align:center}

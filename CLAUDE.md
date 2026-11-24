@@ -41,7 +41,9 @@ App web para que una niña fotografíe sus dibujos en papel, marque sus partes c
 - El primer cuento migrado del cuento único anterior usa el id fijo `primero`, para que dos equipos no lo dupliquen.
 - Ajuste `perfil`: `{ nombre, modificado }` → título «Garabato Mágico de …».
 - En la nube, cada cuento es una fila de `ajustes` con clave `cuento:<id>`, y el perfil la clave `perfil`. Gana el `modificado` mayor. La cola de pendientes usa `aj:<clave>`.
-- La app revisa la nube al abrir, al volver a la pestaña o ícono (`visibilitychange`) y cada minuto.
+- Lo de otros equipos se baja **solo al abrir o recargar la app** (o con «Sincronizar ahora»); el dueño no quiere que la pantalla se refresque sola. Lo de este equipo se sube solo.
+- `escenaInfo` en un cuento: `{ [texto normalizado de la oración]: { accion?, pos?: { [idDibujo]: { x, y, e } } } }`. `accion` es el movimiento elegido a mano; `pos` es dónde quedan los pies (x, y de 0 a 1 de la escena) y `e` el tamaño. Un lugar puesto en una escena sigue en las siguientes hasta que se cambie.
+- Los pasos Dibujos, Marcar, Colorear e Historia solo se muestran dentro de un cuento.
 
 ### Modelo de datos de un dibujo
 
@@ -50,7 +52,8 @@ App web para que una niña fotografíe sus dibujos en papel, marque sus partes c
 - `etiquetas[p]` = id de la parte dueña del píxel (0 = sin marcar, se mueve con todo el cuerpo).
 - Al armar el esqueleto, el interior de una figura cerrada hereda la etiqueta de su contorno, para que el color pintado se mueva con la parte.
 - `reposo: {r, dx, dy}` en una parte es la postura que la niña acomoda con el dedo (modo «Acomodar»). Al tocar «Listo», `GM.hornear(d)` la deja fija: mueve tinta, color y marcas, recoloca los clavitos y borra `reposo`, así se ve igual en Marcar, Colorear y la galería (se puede deshacer en Marcar).
-- `unida` en una parte: id de la parte a la que está pegada, `'nada'`, o vacío = automático. Lo que se agarra (espada) busca el ala, brazo o mano más cercana; en la acción «espada» esa ala o brazo da el golpe.
+- Si en Colorear se pinta fuera del dibujo, `GM.agrandarDibujo` agranda la hoja del dibujo (tinta, color, marcas y clavitos) para que la línea no se corte.
+- `unida` en una parte: id de la parte a la que está pegada, `'nada'`, o vacío = automático. Lo que se agarra (espada) busca el ala, brazo o mano más cercana; en la acción «espada» esa ala o brazo da el golpe, y en las demás acciones casi no se mueve (no aletea con la espada).
 - Cada parte con color lleva un `relleno` (color de alrededor, sin cruzar líneas) que se dibuja con su padre para tapar el hueco cuando la parte se mueve.
 - Pedacitos de línea sin marcar que tocan una parte y son pequeños (menos del 4% de la tinta) pasan a esa parte al armar el esqueleto (`absorberRestos`), para que no queden rayas quietas al moverse.
 - El padre de una parte es la parte más grande con la que se toca; el pivote automático es el punto de la parte más cercano al centro de su padre. La niña puede mover el clavito.

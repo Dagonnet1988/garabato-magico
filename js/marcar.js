@@ -514,6 +514,7 @@
   function probar(on) {
     S.prueba = on;
     $('#mk-prueba').hidden = !on;
+    $('#mk-partes').parentElement.hidden = on || S.acomodar;
     $('#mk-herramientas').hidden = on;
     $('#mk-nueva').hidden = on;
     $('#mk-arriba').hidden = on;

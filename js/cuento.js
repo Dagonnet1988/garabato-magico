@@ -4,7 +4,27 @@
 (function (GM) {
   'use strict';
   const $ = GM.$;
-  const S = { escenas: [], i: 0, jugando: false, t0: 0, anim: 0, finEscena: 0, hablando: false, visible: false };
+  const S = { escenas: [], i: 0, jugando: false, t0: 0, anim: 0, finEscena: 0, hablando: false, visible: false, cajas: [], arr: null, sel: null };
+
+  /* ---------- lo que la niña eligió a mano en cada escena (movimiento y lugar de cada dibujo) ---------- */
+  const claveEscena = (esc) => GM.normalizar(esc.texto).replace(/\s+/g, ' ').trim();
+  function infoEscena(esc, crear) {
+    const c = GM.app.cuentoActual();
+    if (!c || !esc) return null;
+    if (!c.escenaInfo) { if (!crear) return null; c.escenaInfo = {}; }
+    const k = claveEscena(esc);
+    if (!c.escenaInfo[k] && crear) c.escenaInfo[k] = {};
+    return c.escenaInfo[k] || null;
+  }
+  /** Lugar de un dibujo en la escena i: el que se le puso aquí o en una escena anterior. */
+  function posDe(i, id) {
+    for (let j = i; j >= 0; j--) {
+      const inf = infoEscena(S.escenas[j]);
+      if (inf && inf.pos && inf.pos[id]) return inf.pos[id];
+    }
+    return null;
+  }
+  const guardarLuego = GM.debounce(() => GM.app.guardarCuento(), 500);
   let cv, ctx, W = 1200, H = 800, dpr = 1;
 
   const ACCION_RE = [
@@ -192,16 +212,21 @@
     const suelo = fondo(esc.lugar, t);
     const ds = personajesDe(esc);
     const n = ds.length;
+    S.cajas = [];
     ds.forEach((d, k) => {
       const rig = GM.rig(d);
       const caja = GM.cajaPose(rig);
       const bh = caja.y1 - caja.y0 || 1, bw = caja.x1 - caja.x0 || 1;
       const alto = H * (n > 2 ? 0.42 : 0.52);
-      const s = Math.min(alto / bh, (W / Math.max(n, 1.6)) * 0.8 / bw);
-      const cx = n === 1 ? W * 0.5 : W * (0.25 + (0.5 * k) / (n - 1));
+      let s = Math.min(alto / bh, (W / Math.max(n, 1.6)) * 0.8 / bw);
+      let cx = n === 1 ? W * 0.5 : W * (0.25 + (0.5 * k) / (n - 1));
+      let pie = suelo + 10;
+      const pos = posDe(S.i, d.id);
+      if (pos) { cx = pos.x * W; pie = pos.y * H; s *= pos.e || 1; }
+      S.cajas.push({ id: d.id, nombre: d.nombre, x0: cx - bw * s / 2, x1: cx + bw * s / 2, y0: pie - bh * s, y1: pie, cx, pie });
       const acc = k === 0 ? esc.accion : (esc.accion === 'dormir' ? 'dormir' : esc.ids.includes(d.id) ? esc.accion : 'feliz');
       ctx.save();
-      ctx.translate(cx - caja.pie.x * s, suelo + 10 - caja.pie.y * s);
+      ctx.translate(cx - caja.pie.x * s, pie - caja.pie.y * s);
       ctx.scale(s, s);
       // sombra
       ctx.fillStyle = 'rgba(0,0,0,.12)';
@@ -217,6 +242,12 @@
         ctx.globalAlpha = 1;
       }
       ctx.restore();
+      if (S.sel === d.id) {
+        ctx.save();
+        ctx.setLineDash([12, 10]); ctx.lineWidth = 4; ctx.strokeStyle = 'rgba(255,255,255,.95)';
+        ctx.strokeRect(cx - bw * s / 2 - 8, pie - bh * s - 8, bw * s + 16, bh * s + 16);
+        ctx.restore();
+      }
     });
     texto(esc.texto);
   }
@@ -297,6 +328,11 @@
     const dibujos = GM.app.dibujosCuento();
     const r = analizar($('#cu-texto').value, dibujos);
     S.escenas = r.escenas;
+    S.escenas.forEach((e) => {
+      e.auto = e.accion;
+      const inf = infoEscena(e);
+      if (inf && inf.accion) { e.accion = inf.accion; e.manual = true; }
+    });
     const ol = $('#cu-escenas');
     ol.textContent = '';
     r.escenas.forEach((e, k) => {
@@ -306,10 +342,14 @@
       const chips = document.createElement('div');
       chips.className = 'chips';
       const a = GM.ACCIONES.find((x) => x.id === e.accion);
-      [a ? a.emoji + ' ' + a.nombre : '', '📍 ' + e.lugar.replace('montana', 'montaña')].forEach((c) => {
-        if (!c) return;
-        const s = document.createElement('span'); s.className = 'chip'; s.textContent = c; chips.appendChild(s);
-      });
+      const mov = document.createElement('button');
+      mov.className = 'chip cambiar' + (e.manual ? ' manual' : '');
+      mov.textContent = (a ? a.emoji + ' ' + a.nombre : '🧍 Quieto') + ' ▾';
+      mov.setAttribute('aria-label', 'Cambiar el movimiento de esta escena');
+      mov.addEventListener('click', (ev) => { ev.stopPropagation(); irA(k); elegirMovimiento(k); });
+      chips.appendChild(mov);
+      const lu = document.createElement('span'); lu.className = 'chip'; lu.textContent = '📍 ' + e.lugar.replace('montana', 'montaña');
+      chips.appendChild(lu);
       div.appendChild(chips);
       li.appendChild(div);
       li.addEventListener('click', () => irA(k));
@@ -357,6 +397,77 @@
     S.i = 0;
   }
 
+  /** Elegir a mano el movimiento de una escena. */
+  function elegirMovimiento(k) {
+    const esc = S.escenas[k];
+    if (!esc) return;
+    const box = $('#ma-lista');
+    box.textContent = '';
+    const auto = GM.ACCIONES.find((x) => x.id === esc.auto);
+    const ops = [{ id: null, emoji: '✨', nombre: 'Lo que dice el cuento' + (auto ? ' (' + auto.nombre + ')' : '') }].concat(GM.ACCIONES);
+    ops.forEach((o) => {
+      const b = document.createElement('button');
+      b.className = 'accion';
+      b.setAttribute('aria-pressed', String(o.id === null ? !esc.manual : esc.manual && esc.accion === o.id));
+      b.innerHTML = '<span></span>';
+      b.querySelector('span').textContent = o.emoji;
+      b.appendChild(document.createTextNode(o.nombre));
+      b.addEventListener('click', () => {
+        const inf = infoEscena(esc, true);
+        if (o.id) inf.accion = o.id; else delete inf.accion;
+        $('#modal-accion').hidden = true;
+        GM.app.guardarCuento();
+        actualizar();
+      });
+      box.appendChild(b);
+    });
+    $('#ma-escena').textContent = '«' + esc.texto + '»';
+    $('#modal-accion').hidden = false;
+  }
+
+  /* ---------- mover los dibujos en la escena con el dedo ---------- */
+  function aEscena(ev) {
+    const r = cv.getBoundingClientRect();
+    return { x: (ev.clientX - r.left) * (W / r.width), y: (ev.clientY - r.top) * (H / r.height) };
+  }
+  function pintarTamano() {
+    const c = S.cajas.find((x) => x.id === S.sel);
+    $('#cu-tam').hidden = !c;
+    if (c) $('#cu-tam-n').textContent = c.nombre;
+  }
+  function ponerPos(id, cambio) {
+    const esc = S.escenas[S.i];
+    const c = S.cajas.find((x) => x.id === id);
+    if (!esc || !c) return;
+    const inf = infoEscena(esc, true);
+    inf.pos = inf.pos || {};
+    const antes = posDe(S.i, id) || { x: c.cx / W, y: c.pie / H, e: 1 };
+    inf.pos[id] = Object.assign({ x: antes.x, y: antes.y, e: antes.e || 1 }, cambio);
+    guardarLuego();
+  }
+  function tocarEscena(ev) {
+    const pt = aEscena(ev);
+    let hit = null;
+    for (let k = S.cajas.length - 1; k >= 0; k--) {
+      const c = S.cajas[k], m = 20;
+      if (pt.x >= c.x0 - m && pt.x <= c.x1 + m && pt.y >= c.y0 - m && pt.y <= c.y1 + m) { hit = c; break; }
+    }
+    S.sel = hit ? hit.id : null;
+    pintarTamano();
+    if (!hit) return;
+    ev.preventDefault();
+    try { cv.setPointerCapture(ev.pointerId); } catch (e) { /* nada */ }
+    S.arr = { id: hit.id, pid: ev.pointerId, dx: pt.x - hit.cx, dy: pt.y - hit.pie };
+  }
+  function arrastrarEscena(ev) {
+    if (!S.arr || ev.pointerId !== S.arr.pid) return;
+    const pt = aEscena(ev);
+    const x = Math.max(0.02, Math.min(0.98, (pt.x - S.arr.dx) / W));
+    const y = Math.max(0.12, Math.min(1.1, (pt.y - S.arr.dy) / H));
+    ponerPos(S.arr.id, { x, y });
+  }
+  function soltarEscena(ev) { if (S.arr && ev.pointerId === S.arr.pid) S.arr = null; }
+
   function llenarProtagonistas() {
     const sel = $('#cu-protagonista');
     const dibujos = GM.app.dibujosCuento();
@@ -373,6 +484,18 @@
       cv = $('#cv-cuento'); ctx = cv.getContext('2d');
       new ResizeObserver(redimensionar).observe(cv.parentElement);
       $('#cu-texto').addEventListener('input', GM.debounce(actualizar, 400));
+      cv.addEventListener('pointerdown', tocarEscena);
+      cv.addEventListener('pointermove', arrastrarEscena);
+      cv.addEventListener('pointerup', soltarEscena);
+      cv.addEventListener('pointercancel', soltarEscena);
+      $('#cu-tam-mas').addEventListener('click', () => { const p = posDe(S.i, S.sel); ponerPos(S.sel, { e: Math.min(3, ((p && p.e) || 1) * 1.2) }); });
+      $('#cu-tam-menos').addEventListener('click', () => { const p = posDe(S.i, S.sel); ponerPos(S.sel, { e: Math.max(0.25, ((p && p.e) || 1) / 1.2) }); });
+      $('#cu-tam-volver').addEventListener('click', () => {
+        const c = GM.app.cuentoActual();
+        if (c && c.escenaInfo) Object.values(c.escenaInfo).forEach((inf) => { if (inf.pos) delete inf.pos[S.sel]; });
+        guardarLuego();
+      });
+      $('#ma-cerrar').addEventListener('click', () => { $('#modal-accion').hidden = true; });
       $('#cu-titulo').addEventListener('input', GM.debounce(actualizar, 400));
       $('#cu-protagonista').addEventListener('change', (e) => { S.protagonista = e.target.value; actualizar(); });
       $('#cu-play').addEventListener('click', () => (S.jugando ? parar() : jugar()));

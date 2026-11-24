@@ -15,6 +15,7 @@
 <div class="app" id="app">
   <header class="barra">
     <button class="marca" id="btn-perfil" aria-label="Perfil: nombre de quien dibuja"><span class="marca-g">Garabato</span> <span class="marca-m">Mágico</span> <span class="marca-de" id="marca-de" hidden></span></button>
+    <span class="en-cuento" id="en-cuento" hidden></span>
     <nav class="pasos" id="pasos" aria-label="Pasos">
       <button class="paso" data-ir="cuentos" id="paso-cuentos"><span class="paso-ic" aria-hidden="true">📚</span><span>Cuentos</span></button>
       <button class="paso" data-ir="dibujos" id="paso-dibujos"><span class="paso-ic" aria-hidden="true">🖼️</span><span>Dibujos</span></button>
@@ -43,7 +44,7 @@
   <!-- 1. Dibujos del cuento -->
   <main class="pantalla" id="pantalla-dibujos" hidden>
     <div class="galeria-intro">
-      <h1 id="dib-titulo">Dibujos</h1>
+      <h1 id="dib-titulo"><span id="dib-titulo-t">Dibujos</span> <button class="redondo chico" id="dib-renombrar" aria-label="Cambiar el nombre del cuento">✎</button></h1>
       <p>Toma una foto de tu dibujo en papel o dibuja aquí. Luego marca sus partes con el dedo para que se mueva.</p>
     </div>
     <div class="galeria" id="galeria">
@@ -186,6 +187,7 @@
         <button class="redondo" id="cu-sig" aria-label="Escena siguiente">▶▶</button>
         <span class="contador" id="cu-contador">Escena 1 de 1</span>
       </div>
+      <p class="ayuda pista-escena">Arrastra un dibujo para ponerlo donde quieras en esta escena.</p>
     </div>
     <aside class="panel">
       <div class="seccion">
@@ -197,6 +199,14 @@
         <label class="campo" for="cu-texto"><span>Escribe tu cuento. Cada oración es una escena.</span>
           <textarea id="cu-texto" rows="7"></textarea></label>
         <label class="check" for="cu-voz"><input type="checkbox" id="cu-voz" checked> Leer en voz alta</label>
+      </div>
+      <div class="seccion" id="cu-tam" hidden>
+        <h3>Tamaño de <span id="cu-tam-n"></span></h3>
+        <div class="fila">
+          <button class="btn" id="cu-tam-menos">− Más pequeño</button>
+          <button class="btn" id="cu-tam-mas">＋ Más grande</button>
+        </div>
+        <button class="btn" id="cu-tam-volver">↺ Volver a su lugar en todo el cuento</button>
       </div>
       <div class="seccion" id="cu-faltan-sec" hidden>
         <h3>¡Faltan dibujos!</h3>
@@ -259,7 +269,7 @@
       <p class="ayuda">Cuenta: <strong id="cn-correo-actual"></strong>. Cada cambio se guarda en la nube y en este equipo.</p>
       <div class="fila"><button class="btn" id="cn-salir">Cerrar sesión</button><button class="btn primario" id="cn-sincronizar">Sincronizar ahora</button></div>
       <p class="ayuda" id="cn-estado"></p>
-      <p class="ayuda">Los cambios se suben solos. Los de otros equipos llegan al abrir la app, al volver a ella y cada minuto.</p>
+      <p class="ayuda">Los cambios se suben solos. Los de otros equipos llegan al abrir o recargar la app, o con «Sincronizar ahora».</p>
       <div class="fila"><button class="btn" id="cn-cerrar2">Cerrar</button></div>
     </div>
     <p class="ayuda error" id="cn-error" hidden></p>
@@ -298,6 +308,16 @@
     <h2 id="mt-t">Elige un dibujo para este cuento</h2>
     <div class="galeria chica" id="mt-lista"></div>
     <div class="fila"><button class="btn" id="mt-cerrar">Cerrar</button></div>
+  </div>
+</div>
+
+<!-- Movimiento de una escena -->
+<div class="modal" id="modal-accion" hidden>
+  <div class="modal-caja" role="dialog" aria-modal="true" aria-labelledby="ma-t">
+    <h2 id="ma-t">¿Qué hace en esta escena?</h2>
+    <p class="ayuda" id="ma-escena"></p>
+    <div class="acciones" id="ma-lista"></div>
+    <div class="fila"><button class="btn" id="ma-cerrar">Cerrar</button></div>
   </div>
 </div>
 

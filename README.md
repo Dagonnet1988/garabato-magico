@@ -22,7 +22,7 @@ Pensada para iPad. Funciona sin internet una vez cargada y sin IA: todo pasa en 
 
    El círculo blanco es el **clavito**: muévelo al lugar donde la parte se une al cuerpo (la cadera para una pierna, el hombro para un ala). Toca **▶ ¡Probar!** para verlo saltar, volar, bailar...
 3. **Colorear**: rellena formas cerradas, usa el crayón, agrega líneas con el lápiz o borra. Lo que pintas se mueve con su parte.
-4. **Historia**: escribe tu cuento. Cada oración es una escena. Palabras como *salta, vuela, corre, baila, espada, mira, duerme* mueven al personaje; *bosque, mar, noche, cielo, casa, montaña* cambian el fondo. Si nombras a alguien que todavía no dibujaste, la app te pide que lo dibujes.
+4. **Historia**: escribe tu cuento. Toca el movimiento debajo de cada escena para elegir otro a mano, y arrastra un dibujo en la escena para ponerlo donde quieras (con «Más grande / Más pequeño» cambias su tamaño). Cada oración es una escena. Palabras como *salta, vuela, corre, baila, espada, mira, duerme* mueven al personaje; *bosque, mar, noche, cielo, casa, montaña* cambian el fondo. Si nombras a alguien que todavía no dibujaste, la app te pide que lo dibujes.
 
 ## Abrirla en el iPad
 
@@ -38,6 +38,6 @@ La app ya está conectada a Supabase. En cada equipo:
 2. La primera vez, escribe correo y contraseña y toca **Crear cuenta nueva**. Llega un correo de Supabase: toca el enlace para confirmar.
 3. Vuelve a la app y toca **Entrar**. En los demás equipos, solo **Entrar** con el mismo correo y contraseña.
 
-Cada cambio se sube solo unos segundos después. Los cambios de otros equipos llegan al abrir la app, al volver a ella y cada minuto mientras está abierta. En ☁️ se ve la última vez que se revisó la nube y si hubo algún problema. Ojo: en el iPad, Safari y el ícono de pantalla de inicio son como dos equipos distintos: hay que tocar «Entrar» en cada uno.
+Cada cambio se sube solo unos segundos después. Los cambios de otros equipos llegan al abrir o recargar la app, o al tocar ☁️ → «Sincronizar ahora». En ☁️ se ve la última vez que se revisó la nube y si hubo algún problema. Ojo: en el iPad, Safari y el ícono de pantalla de inicio son como dos equipos distintos: hay que tocar «Entrar» en cada uno.
 
 Para montar otro proyecto de Supabase: pega `supabase/esquema.sql` en el SQL Editor, pon la URL de la app como *Site URL* en Authentication → URL Configuration, y copia la Project URL y la clave publishable (o anon) en `js/config.js`.

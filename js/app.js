@@ -127,7 +127,17 @@
     return c.toDataURL('image/png');
   }
 
-  function tarjeta(titulo, info, img, alTocar, quitar) {
+  /** Ventana para crear un cuento o cambiarle el nombre. */
+  function pedirTituloCuento(c) {
+    A.renombrando = c || null;
+    $('#mc-t').textContent = c ? 'Cambiar el nombre del cuento' : '¿Cómo se llama tu cuento?';
+    $('#mc-crear').textContent = c ? 'Guardar' : 'Crear cuento';
+    $('#mc-titulo').value = c ? c.titulo : '';
+    $('#modal-cuento').hidden = false;
+    setTimeout(() => $('#mc-titulo').focus(), 50);
+  }
+
+  function tarjeta(titulo, info, img, alTocar, quitar, editar) {
     const b = document.createElement('div');
     b.className = 'tarjeta';
     b.setAttribute('role', 'button');
@@ -137,6 +147,12 @@
     if (img) { const i = document.createElement('img'); i.src = img; i.alt = titulo; mini.appendChild(i); } else { mini.textContent = '📖'; mini.classList.add('vacia'); }
     b.querySelector('.nombre').textContent = titulo;
     b.querySelector('.info').textContent = info;
+    if (editar) {
+      const e = document.createElement('button');
+      e.className = 'quitar editar'; e.setAttribute('aria-label', 'Cambiar nombre'); e.textContent = '✎';
+      e.addEventListener('click', (ev) => { ev.stopPropagation(); editar(); });
+      b.appendChild(e);
+    }
     if (quitar) {
       const q = document.createElement('button');
       q.className = 'quitar'; q.setAttribute('aria-label', quitar.etiqueta); q.textContent = '✕';
@@ -175,14 +191,14 @@
           pintarCuentos(); pintarPasos();
           GM.aviso('Cuento borrado. Sus dibujos siguen guardados en «Un dibujo que ya tengo».', 3600);
         },
-      }), $('#cuento-nuevo'));
+      }, () => pedirTituloCuento(c)), $('#cuento-nuevo'));
     });
   }
 
   function pintarGaleria() {
     const g = $('#galeria');
     GM.$$('.tarjeta:not(.nueva)', g).forEach((x) => x.remove());
-    $('#dib-titulo').textContent = A.cuento ? 'Dibujos de «' + A.cuento.titulo + '»' : 'Dibujos';
+    $('#dib-titulo-t').textContent = A.cuento ? 'Dibujos de «' + A.cuento.titulo + '»' : 'Dibujos';
     dibujosDe(A.cuento).forEach((d) => {
       const enOtros = vivos().some((c) => c !== A.cuento && c.dibujos.includes(d.id));
       const info = d.partes.length ? d.partes.length + ' partes marcadas' : 'Sin partes marcadas';
@@ -314,7 +330,11 @@
       if (p === A.pantalla || (A.pantalla === 'importar' && p === 'dibujos')) b.setAttribute('aria-current', 'page');
       else b.removeAttribute('aria-current');
       b.disabled = p === 'cuentos' ? false : !A.cuento ? true : (p === 'marcar' || p === 'colorear') ? !A.actual : false;
+      // Dibujos, Marcar, Colorear e Historia aparecen solo dentro de un cuento
+      b.hidden = p !== 'cuentos' && (A.pantalla === 'cuentos' || !A.cuento);
     });
+    $('#en-cuento').hidden = A.pantalla === 'cuentos' || !A.cuento;
+    $('#en-cuento').textContent = A.cuento ? A.cuento.titulo : '';
   }
 
   /** Dibujo en blanco para dibujar dentro de la app. */
@@ -421,13 +441,15 @@
     remotos.forEach((v, id) => {
       const l = A.cuentos.find((c) => c.id === id);
       if (!l) { if (!v.parcial) { A.cuentos.push(Object.assign({ dibujos: [] }, v, { id })); cuentosCambiaron = true; } return; }
-      if ((v.modificado || 0) >= (l.modificado || 0)) {
+      const vm = v.modificado || 0, lm = l.modificado || 0;
+      if (vm > lm || (vm === lm && lm <= 1)) {
+        const antes = JSON.stringify(l);
         if (v.parcial) { l.texto = v.texto || l.texto; l.protagonista = v.protagonista || l.protagonista; l.modificado = v.modificado; GM.nube.ajusteCambio('cuento:' + id); }
         else { Object.keys(l).forEach((k) => delete l[k]); Object.assign(l, { dibujos: [] }, v, { id }); }
-        cuentosCambiaron = true;
-      } else GM.nube.ajusteCambio('cuento:' + id);
+        if (JSON.stringify(l) !== antes) cuentosCambiaron = true;
+      } else if (lm > vm) GM.nube.ajusteCambio('cuento:' + id);
     });
-    A.cuentos.forEach((c) => { if (!remotos.has(c.id) || remotos.get(c.id).parcial) GM.nube.ajusteCambio('cuento:' + c.id); });
+    A.cuentos.forEach((c) => { if (!remotos.has(c.id)) GM.nube.ajusteCambio('cuento:' + c.id); });
     if (cuentosCambiaron) { GM.store.guardarAjuste('cuentos', A.cuentos); cambio = true; }
     if (!cambio) return;
     A.dibujos.sort((a, b) => (a.creado || 0) - (b.creado || 0));
@@ -492,8 +514,17 @@
     $('#pf-cerrar').addEventListener('click', () => { $('#modal-perfil').hidden = true; GM.store.guardarAjuste('perfilPreguntado', true); });
 
     // cuentos
-    $('#cuento-nuevo').addEventListener('click', () => { $('#mc-titulo').value = ''; $('#modal-cuento').hidden = false; setTimeout(() => $('#mc-titulo').focus(), 50); });
+    $('#cuento-nuevo').addEventListener('click', () => pedirTituloCuento(null));
+    $('#dib-renombrar').addEventListener('click', () => pedirTituloCuento(A.cuento));
     const crear = () => {
+      if (A.renombrando) {
+        const t = $('#mc-titulo').value.trim();
+        if (t) { A.renombrando.titulo = t; guardarCuento(A.renombrando); }
+        $('#modal-cuento').hidden = true;
+        A.renombrando = null;
+        ir(A.pantalla === 'cuentos' ? 'cuentos' : A.pantalla);
+        return;
+      }
       const c = crearCuento($('#mc-titulo').value.trim() || 'Cuento ' + (vivos().length + 1));
       $('#modal-cuento').hidden = true;
       abrirCuento(c);
@@ -589,11 +620,9 @@
     ir(A.cuento && ['dibujos', 'marcar', 'colorear', 'cuento'].includes(h) ? h : 'cuentos');
     if (!A.perfil.nombre && !(await GM.store.leerAjuste('perfilPreguntado'))) abrirPerfil();
 
-    // La nube se revisa al abrir, al volver a la app y cada minuto mientras está abierta
+    // Lo de otros equipos se trae solo al abrir la app (o recargar), o con «Sincronizar ahora».
+    // Lo que cambia aquí se sube solo, sin tocar la pantalla.
     if (GM.nube.correo()) sincronizar();
-    document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') sincronizar(); });
-    window.addEventListener('focus', () => { if (Date.now() - A.ultimaSync > 15000) sincronizar(); });
-    setInterval(() => { if (document.visibilityState === 'visible') sincronizar(); }, 60000);
   }
 
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', iniciar);

@@ -4,12 +4,13 @@
   'use strict';
   const $ = GM.$;
   const COLORES = ['#e53935', '#fb8c00', '#fdd835', '#43a047', '#1e88e5', '#8e24aa', '#f06292', '#8d6e63', '#26c6da', '#c0ca33', '#212121', '#ffffff'];
-  const S = { d: null, herr: 'cubeta', tam: 16, color: COLORES[3], pila: [], ult: null };
+  const S = { d: null, herr: 'cubeta', tam: 16, color: COLORES[3], pila: [], ult: null, corrido: { x: 0, y: 0 } };
   let L = null;
 
   function recordar() {
     const d = S.d;
     S.pila.push({
+      dx: S.corrido.x, dy: S.corrido.y,
       c: d.color.getContext('2d').getImageData(0, 0, d.w, d.h),
       t: S.herr === 'lapiz' || S.herr === 'goma' ? d.tinta.getContext('2d').getImageData(0, 0, d.w, d.h) : null,
       u: d.colorUsado,
@@ -20,8 +21,14 @@
   function deshacer() {
     const u = S.pila.pop();
     if (!u) { GM.aviso('No hay nada que deshacer'); return; }
-    S.d.color.getContext('2d').putImageData(u.c, 0, 0);
-    if (u.t) { S.d.tinta.getContext('2d').putImageData(u.t, 0, 0); S.d.tintaVer++; }
+    // si la hoja creció después, lo de antes queda corrido
+    const ox = S.corrido.x - u.dx, oy = S.corrido.y - u.dy;
+    if (ox || oy || u.c.width !== S.d.w || u.c.height !== S.d.h) {
+      S.d.color.getContext('2d').clearRect(0, 0, S.d.w, S.d.h);
+      if (u.t) S.d.tinta.getContext('2d').clearRect(0, 0, S.d.w, S.d.h);
+    }
+    S.d.color.getContext('2d').putImageData(u.c, ox, oy);
+    if (u.t) { S.d.tinta.getContext('2d').putImageData(u.t, ox, oy); S.d.tintaVer++; }
     S.d.colorUsado = u.u;
     cambiado();
   }
@@ -82,9 +89,31 @@
     return 0.35 + ev.pressure * 1.3;
   }
 
+  /** Si el trazo se sale del dibujo, la hoja del dibujo crece (para que la línea no se corte). */
+  function hacerEspacio(pts, r) {
+    const d = S.d, m = r + 2;
+    let izq = 0, arr = 0, der = 0, aba = 0;
+    for (const p of pts) {
+      izq = Math.max(izq, m - p.x); arr = Math.max(arr, m - p.y);
+      der = Math.max(der, p.x + m - d.w); aba = Math.max(aba, p.y + m - d.h);
+    }
+    if (izq <= 0 && arr <= 0 && der <= 0 && aba <= 0) return;
+    const extra = 120, MAX = 2400;
+    const L0 = izq > 0 ? Math.ceil(izq + extra) : 0, T0 = arr > 0 ? Math.ceil(arr + extra) : 0;
+    const R0 = der > 0 ? Math.ceil(der + extra) : 0, B0 = aba > 0 ? Math.ceil(aba + extra) : 0;
+    if (d.w + L0 + R0 > MAX || d.h + T0 + B0 > MAX) return; // ya es muy grande
+    GM.agrandarDibujo(d, L0, T0, R0, B0);
+    S.corrido.x += L0; S.corrido.y += T0;
+    for (const p of pts) { p.x += L0; p.y += T0; }
+    if (S.ult && pts.indexOf(S.ult) < 0) { S.ult.x += L0; S.ult.y += T0; }
+    // la vista se corre igual, así el dibujo no salta en la pantalla
+    L.vista.x -= L0 * L.vista.s; L.vista.y -= T0 * L.vista.s;
+  }
+
   function trazo(a, b, ev) {
     const d = S.d;
     const r = S.tam * L.pxPorCss() * presion(ev);
+    hacerEspacio(a === b ? [a] : [a, b], r);
     const capas = S.herr === 'goma' ? [d.color, d.tinta] : S.herr === 'lapiz' ? [d.tinta] : [d.color];
     capas.forEach((cv) => {
       const c = cv.getContext('2d');
@@ -160,7 +189,7 @@
       elegirHerr('cubeta');
     },
     abrir(d, herr) {
-      if (S.d !== d) S.pila = [];
+      if (S.d !== d) { S.pila = []; S.corrido = { x: 0, y: 0 }; }
       if (herr) elegirHerr(herr);
       S.d = d;
       L.ajustado = false;

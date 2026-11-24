@@ -376,6 +376,8 @@
       const dir = p.cx >= p.pivote.x ? 1 : -1;
       return [(-0.55 + 1.0 * sierra(t * 1.3)) * dir, 1, 1, 0, 0];
     }
+    // con la espada en la mano no aletea: solo se mece un poquito (al caminar, volar, etc.)
+    if (p.sostiene) return [Math.sin(t * 2 + f) * (acc === 'quieto' || acc === 'dormir' ? 0.03 : 0.07), 1, 1, 0, 0];
     switch (p.mov) {
       case 'aletear': {
         const vel = acc === 'volar' ? 16 : mueve ? 9 : acc === 'feliz' ? 10 : 4;

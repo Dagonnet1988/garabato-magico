@@ -53,6 +53,19 @@ window.GM = window.GM || {};
   };
 
   /* Matrices afines 2D [a,b,c,d,e,f] (mismo orden que canvas setTransform). */
+  /** Agranda el dibujo agregando espacio a los lados; lo que había se corre (izq, arriba). */
+  GM.agrandarDibujo = function (d, izq, arriba, der, abajo) {
+    const w = d.w + izq + der, h = d.h + arriba + abajo;
+    const mover = (cv) => { const c = GM.crearCanvas(w, h); c.getContext('2d').drawImage(cv, izq, arriba); return c; };
+    d.tinta = mover(d.tinta); d.color = mover(d.color);
+    const e = new Uint8Array(w * h);
+    for (let y = 0; y < d.h; y++) e.set(d.etiquetas.subarray(y * d.w, (y + 1) * d.w), (y + arriba) * w + izq);
+    d.etiquetas = e;
+    d.partes.forEach((p) => { if (p.pivote) p.pivote = { x: p.pivote.x + izq, y: p.pivote.y + arriba }; });
+    d.w = w; d.h = h;
+    d.version = (d.version || 0) + 1; d.tintaVer = (d.tintaVer || 0) + 1; d._rig = null;
+  };
+
   GM.mat = {
     id: () => [1, 0, 0, 1, 0, 0],
     mul(m, n) {
